@@ -1,0 +1,372 @@
+---
+title: "SVM"
+output: html_document
+date: "2024-03-01"
+---
+
+
+
+
+
+
+
+
+
+# CaseStudy 9.10 Predict Student Admission
+RMD: Ch9.CaseStudySVM_update
+
+Background
+Admission to the university is an important topic. Effective university admission prediction is needed to help students choose the right university college and assure their tertiary education's performance. How a student chooses a university, and conversely how a university chooses a student, determines both sides' success in carrying through the education. However, due to the vast number of students required to attend the university every year, this decision-making process became a complex problem. Universities admissions are faced annually with a tremendous quantity of student applicants—the size of the applicant pool taxes the admissions staff's resources. Therefore, university admission prediction methods are used for categorizing student applicants (Ragab et al., 2012, 12th International Conference of Intelligent Systems Design and Applications).
+
+Case study (Business Understanding Phase)
+Suppose you are the university department administrator, and you want to determine each applicant's chance of admission based on their results on two exams. To address this prediction problem, you collect historical data from previous applicants you can use as a training set for the support vector machine model. For each training example, you have the applicant's scores on two exams and the admissions decision. Your task is to build a classification model that estimates an applicant's probability of admission based on those two exams' scores.
+
+
+The data (Data Understanding Phase)
+There is one dataset for this problem. The dataset (Admission.csv) consists of data for n = 100 observations (students). Each observation contains information on three variables:
+- The two independent variables (V1 and V2) are numerical values of two different undergraduate grades
+- The dependent variable (V3) is an integer, representing the admission decision (0=rejected; 1=accepted)
+Our study's primary goal is to correctly predict whether students will be admitted or not at the university. This means that we are facing a predictive data mining task.
+```{r}
+#install.packages("dplyr")
+```
+
+
+```{r dataload}
+library(dplyr)
+library(readr)
+Admission <- read_csv("C:/ML1ny/ML2/Admission.csv")
+#View(Admission)
+data1 <- Admission
+
+glimpse(Admission)
+```
+
+Task 2: Inspect your data and do the required variable adaptations and transformations 
+```{r data summary}
+#  * Support Vector models have no distributional assumptions
+#  * Outliers do not (generally) influence the SVM models
+#  * Data exploration is done 
+#      - to identify possible errors in the data 
+#      - to adapt the variables type
+#      - to evaluate and treat the missing values
+#      - to better understand the data
+
+# renaming the variables (optional)
+# library(tidyverse)
+# Admission <- Admission %>% 
+#              rename(Grade1 = V1, Grade2 = V2, DV = V3)
+summary(Admission)
+options(repr.plot.width=4, repr.plot.height=4)
+plot_histogram(Admission)
+```
+
+```{r Transform V3 into factor}
+# encode the reponse as a factor variable
+Admission$V3=as.factor(Admission$V3)
+plot_bar(Admission)
+levels(Admission$V3) <- c("Yes", "No") # svm does not accept 0/1 labels
+# concl: this data is not too unbalanced 
+# if the distribution of classes (0/1) is extremely unbalanced, there are statistical methods that can be used to improve the data and directly the algorithm performance (see Supplementary below)
+```
+Supplementary information on handling unbalanced datasets
+- it applies to all classifiers 
+- there are some alternatives to handle the unbalanced datasets
+- they are available in the library ROSE 
+- There are two main functions: ROSE and ovun.sample. 
+- ROSE is based on bootstrapping
+- Ovun.sample is the one I am referring to in particular. The parameter “method”  allows to do:
+
+ 1) OVER-SAMPLING the minority class: generating synthetic data that tries to randomly generate a sample of the attributes from observations in the minority class.
+ 2) UNDER-SAMPLING the majority class: randomly delete some of the observations from the majority class in order to match the numbers with the minority class
+ 3) BOTH: a combination of over- and under- sampling (method=”both”)
+References about this topic: https://cran.r-project.org/web/packages/ROSE/ROSE.pdf
+Lunardon, N., Menardi, G., and Torelli, N. (2014). ROSE: a Package for Binary Imbalanced Learning. R Journal, 6:82--92.
+Menardi, G. and Torelli, N. (2014). Training and assessing classification rules with imbalanced data. Data Mining and Knowledge Discovery, 28:92--122.
+
+```{r Missings}
+# evaluate the missing data
+library(DataExplorer)
+plot_missing(Admission)
+```
+No missing values in this dataset
+For many other exploratory techniques, including dealing with missing values, consider the previous case studies discussed.
+
+Task 3: Build one or several predictive models and evaluate their performance 
+The main goal of this case study is to obtain accurate predictions for a student being admitted or rejected at the university. Given that the DV is categorical, we are facing a classification task. In a data mining project, we would try to compare several classifiers. For the purpose of this exercise, we focus on support vector methods.
+
+```{r DV Plot}
+library(ggplot2)
+qplot(
+  x = V1,
+  y = V2,
+  data = Admission,
+  color = V3 # color by factor 
+)
+```
+The output shows that a linear classifier might be sufficient
+This plot is handy when working with only two predictors
+Next we run a Support Vector Classifier with kernel=linear
+
+```{r Train Testset}
+# Splitting into train (for tuning parameters) and test (for performance evaluation)
+set.seed(1)
+train <- sample(nrow(Admission), 80) #creates a random sample of row indices from the Admission dataset. nrow(Admission) gives the total number of rows in the Admission dataset, and sample() is used to randomly select 80 of these row numbers.
+Admission.train <- Admission[train, ]
+Admission.test <- Admission[-train, ]
+```
+
+```{r Linear SVM - Tuning cost parameter}
+# To run a SV machines you need to establish the parameter "cost"
+# use tune() to search for the best cost among a range of possible values
+library (e1071)
+set.seed(1)
+tune.linear <- tune(svm, V3 ~ ., data = Admission.train, kernel = "linear", ranges = list(cost = 10^seq(-2, 1, by = 0.25)))
+summary(tune.linear)
+```
+The output shows the best cost is 0.1
+
+```{r Fit Linear SVM with best-tune}
+#  train the model with the tuned cost
+svm.linear <- svm(V3 ~ ., kernel = "linear", data = Admission.train, cost = tune.linear$best.parameter$cost)
+
+# ask for plot 
+plot(svm.linear, Admission.train) 
+
+# ask for support vectors 
+svm.linear$index 
+
+# get summary info 
+summary(svm.linear)
+```
+Observations marked with x are the support vectors
+The observations that are not support vectors are indicated as circles
+
+Model Evaluation: Several criteria to evaluate the tuned model e.g.error rate, recall, precision, AUC. These criteria should be evaluated on the testing data set 
+```{r ROC AUC Evaluation}
+# ROC and AUC
+library(caTools) 
+# re-train the same model with probability = TRUE
+svm.linear <- svm(V3 ~ ., kernel = "linear", data = Admission.train, cost = tune.linear$best.parameter$cost, probability=TRUE)
+test.pred = predict(svm.linear, Admission.test, probability = TRUE)
+  
+colAUC(attributes(test.pred)$probabilities[,1], Admission.test$V3, plotROC = TRUE) # extract the corresponding probabilities from the list 
+```
+The AUC=0.8571429 is close to 1, revealing that our model is very good in predicting whether a particular student will be admitted or not.
+
+```{r Confusion Matrix}
+# confusion matrix, recall, specificity
+library(caret)
+confusionMatrix(factor(ifelse(attributes(test.pred)$probabilities[,1] > 0.5, "Yes", "No")),factor(Admission.test$V3), positive = "Yes")
+```
+
+Task 4: Reflect on implications and recommendations.
+a.) The main goal of our study was to correctly predict whether students will be admitted or not at the university. This can help the universities to select the best students and at the same time reduce the effort and time involved into evaluating the students applications.  Our model (SVM linear) managed to predict well with an overall error rate of ... when the cutoff was .... SVM linear model with a cost of 0.1 was related with a high ROC curve and an AUC = 0.85. Sensitivity or recall (1-Type error II) was ... meaning that the model is able to predict ... the Yes´s. 
+
+b.) Discuss the seriousness of different type of errors. Which of the two types of error is less serious in this context?
+- The False Positives (Type 1 error) is less serious, as these students may have been predicted a yes and got a Uni-permission but may have dropped out.
+The exact cost from a False Positive may be high, as the student gets onboarded but ends up chasing another career or fails the exams.
+- The False Negatives (Type2error) is more serious, as these students ended yp applying for the Uni-program but did not got permission.
+
+Alina: Current university policy may favour more sensitive models (high true positive rate, that is, high (1-Type error II), minimizing Type error II (fn = true Yes predicted as being No)); or, more specific models (low false positive rate, that is minimizing Type I error (fp = true No predicted as being Yes)).
+Perhaps in this context, minimizing the false positives (fp) would be more important because one would like to avoid that "unprepared" students get admitted to a particular program. The cost of false positives might be much higher than the price of false negatives. Accepting students who are not prepared to follow that program (i.e., fp) may increase students' abandoning the program later, failing at the exams, or pursuing a second career later). Comparatively, the cost of false negatives could be lower. The program will miss the opportunity to accept some of the "prepared" students in the program. Still, as long as this number is not too high, the society can assume this cost. 
+
+The model is acceptable, but one can impose a higher cost for fp, if desired (see a similar discussion in "Ch 9 Solutions Ex 8_update.R") and get the required cutoff.
+
+```{r Minimize False Positives (Type1error)}
+# get the cutoff probability corresponding to the minimum total cost, given that cost.fp = 2*cost.fn 
+library(ROCR)
+pred = prediction(attributes(test.pred)$probabilities[,1], Admission.test$V3, label.ordering = NULL)
+cost.perf = performance(pred, "cost", cost.fp = 2, cost.fn = 1) #evaluates the performance of the predictions in terms of cost, specifying that the cost of a false positive (cost.fp) is twice that of a false negative (cost.fn). This cost function is crucial in scenarios where the consequences of false positives and false negatives are different.
+pred@cutoffs[[1]][which.min(cost.perf@y.values[[1]])] # identifies the cutoff probability that minimizes the total cost. pred@cutoffs[[1]] contains the possible cutoff values, and cost.perf@y.values[[1]] contains the total cost for each cutoff. which.min finds the index of the minimum cost, and this index is used to select the corresponding optimal cutoff from pred@cutoffs.
+
+# 0.7533893 - it may be different for your run
+```
+
+
+```{r Test False Positives (Type1error)}
+# now check 
+library(caret)
+confusionMatrix(factor(ifelse(attributes(test.pred)$probabilities[,1] > 0.7578759, "Yes", "No")),factor(Admission.test$V3), positive = "Yes") 
+```
+The minimization of the Cutoff-value gained a specificity-rate of 100%.
+The model does not make any False Positives, and saves money for the Universitu due to drop-outs and University-seats being occupied by "not-ready" students.
+
+# CaseStudy 9.10 Predict Product Quality
+RMD: Ch9.CaseStudySVM_update
+
+Background 
+Quality assurance (QA) is a way of preventing mistakes and defects in manufactured products and avoiding problems when delivering products or services to customers. QA serves as the foundation for customer satisfaction and continuous improvement in all aspects of operation. During Quality Assurance (QA), each microchip goes through various tests to ensure it is functioning correctly.
+
+Case study (Business Understanding Phase)
+Suppose you are the product manager of the factory and you have the test results for some microchips on two different tests. From these two tests, you would like to determine whether the microchips should be accepted or rejected. To help you make the decision, you have a dataset of test results on past microchips, from which you can build a classifier. Again, in a full DM project, you would compare several classifiers. For the purpose of this lecture, let us focus on Support Vector models.
+
+The data (Data Understanding Phase)
+There is one dataset for this problem. 
+- The dataset (Microchips.csv) consists of data for n = 118 observations (microchips). Each observation contains information on 3 variables:
+- The two independent variables (V1 and V2) are numerical values of two different tests of microchips
+- The dependent variable (V3) is integer, representing the tester decision (0=reject; 1=accept)
+In this case study, you will implement a support vector classifier to predict whether microchips from a fabrication plant passes quality assurance (QA).
+
+```{r dataload}
+library(dplyr)
+library(readr)
+Microchips <- read_csv("C:/ML1ny/ML2/Microchips.csv")
+#View(Microchips)
+data1 <- Microchips
+
+glimpse(Microchips)
+```
+
+Task 2: Inspect your data and do the required variable adaptations and transformations 
+```{r data summary}
+#  * Support Vector models have no distributional assumptions
+#  * Outliers do not (generally) influence the SVM models
+#  * Data exploration is done 
+#      - to identify possible errors in the data 
+#      - to adapt the variables type
+#      - to evaluate and treat the missing values
+#      - to better understand the data
+
+# renaming the variables (optional)
+# library(tidyverse)
+# Admission <- Admission %>% 
+#              rename(Grade1 = V1, Grade2 = V2, DV = V3)
+summary(Microchips)
+options(repr.plot.width=4, repr.plot.height=4)
+plot_histogram(Microchips)
+```
+
+```{r Transform V3 into factor}
+# encode the reponse as a factor variable
+Microchips$V3=as.factor(Microchips$V3)
+levels(Microchips$V3) <- c("No", "Yes")
+# plot it
+plot_bar(Microchips) # svm does not accept 0/1 labels
+# concl: this data is not too unbalanced 
+# if the distribution of classes (0/1) is extremely unbalanced, there are statistical methods that can be used to improve the data and directly the algorithm performance (see Supplementary below)
+```
+Supplementary information on handling unbalanced datasets
+- it applies to all classifiers 
+- there are some alternatives to handle the unbalanced datasets
+- they are available in the library ROSE 
+- There are two main functions: ROSE and ovun.sample. 
+- ROSE is based on bootstrapping
+- Ovun.sample is the one I am referring to in particular. The parameter “method”  allows to do:
+
+ 1) OVER-SAMPLING the minority class: generating synthetic data that tries to randomly generate a sample of the attributes from observations in the minority class.
+ 2) UNDER-SAMPLING the majority class: randomly delete some of the observations from the majority class in order to match the numbers with the minority class
+ 3) BOTH: a combination of over- and under- sampling (method=”both”)
+References about this topic: https://cran.r-project.org/web/packages/ROSE/ROSE.pdf
+Lunardon, N., Menardi, G., and Torelli, N. (2014). ROSE: a Package for Binary Imbalanced Learning. R Journal, 6:82--92.
+Menardi, G. and Torelli, N. (2014). Training and assessing classification rules with imbalanced data. Data Mining and Knowledge Discovery, 28:92--122.
+
+```{r Missings}
+# evaluate the missing data
+library(DataExplorer)
+plot_missing(Microchips)
+```
+No missing values in this dataset
+For many other exploratory techniques, including dealing with missing values, consider the previous case studies discussed.
+
+Task 3: Build one or several predictive models and evaluate their performance. For the purpose of this exercise, we focus on support vector methods.
+
+```{r DV Plot}
+library(ggplot2)
+qplot(
+  x = V1,
+  y = V2,
+  data = Microchips,
+  color = V3 # color by factor 
+)
+```
+The output suggests a nonlinear classifier
+Next, we run a Support Vector Machines with kernel nonlinear; as an exercise, you may later try a polynomial kernel.
+
+```{r Train Testset}
+# Splitting into train (for tuning parameters) and test (for performance evaluation)
+set.seed(1)
+train <- sample(nrow(Microchips), 95) #creates a random sample of row indices from the Admission dataset. nrow(Admission) gives the total number of rows in the Admission dataset, and sample() is used to randomly select 80 of these row numbers.
+Microchips.train <- Microchips[train, ]
+Microchips.test <- Microchips[-train, ]
+```
+
+```{r Radial SVM - Tuning cost parameter}
+# To run a SV machines you need to establish the parameter "cost" and gamma
+# use tune() to search for the best cost among a range of possible values
+library (e1071)
+set.seed(1)
+tune.nonlinear <- tune(svm, V3 ~ ., data = Microchips.train, kernel = "radial", ranges = list(cost = 10^seq(-2, 1, by = 0.25), gamma=c(0.5,1,2,3,4)))
+summary(tune.nonlinear)
+# Alina: best cost is 1.778279 and best gamma is 0.5
+```
+The output shows the best cost is 0.5623413 and gamma = 4.
+
+###BOOKMARK
+
+```{r Fit Linear SVM with best-tune}
+#  train the model with the tuned cost
+svm.linear <- svm(V3 ~ ., kernel = "linear", data = Admission.train, cost = tune.linear$best.parameter$cost)
+
+# ask for plot 
+plot(svm.linear, Admission.train) 
+
+# ask for support vectors 
+svm.linear$index 
+
+# get summary info 
+summary(svm.linear)
+```
+Observations marked with x are the support vectors
+The observations that are not support vectors are indicated as circles
+
+Model Evaluation: Several criteria to evaluate the tuned model e.g.error rate, recall, precision, AUC. These criteria should be evaluated on the testing data set 
+```{r ROC AUC Evaluation}
+# ROC and AUC
+library(caTools) 
+# re-train the same model with probability = TRUE
+svm.linear <- svm(V3 ~ ., kernel = "linear", data = Admission.train, cost = tune.linear$best.parameter$cost, probability=TRUE)
+test.pred = predict(svm.linear, Admission.test, probability = TRUE)
+  
+colAUC(attributes(test.pred)$probabilities[,1], Admission.test$V3, plotROC = TRUE) # extract the corresponding probabilities from the list 
+```
+The AUC=0.8571429 is close to 1, revealing that our model is very good in predicting whether a particular student will be admitted or not.
+
+```{r Confusion Matrix}
+# confusion matrix, recall, specificity
+library(caret)
+confusionMatrix(factor(ifelse(attributes(test.pred)$probabilities[,1] > 0.5, "Yes", "No")),factor(Admission.test$V3), positive = "Yes")
+```
+
+Task 4: Reflect on implications and recommendations.
+a.) The main goal of our study was to correctly predict whether students will be admitted or not at the university. This can help the universities to select the best students and at the same time reduce the effort and time involved into evaluating the students applications.  Our model (SVM linear) managed to predict well with an overall error rate of ... when the cutoff was .... SVM linear model with a cost of 0.1 was related with a high ROC curve and an AUC = 0.85. Sensitivity or recall (1-Type error II) was ... meaning that the model is able to predict ... the Yes´s. 
+
+b.) Discuss the seriousness of different type of errors. Which of the two types of error is less serious in this context?
+- The False Positives (Type 1 error) is less serious, as these students may have been predicted a yes and got a Uni-permission but may have dropped out.
+The exact cost from a False Positive may be high, as the student gets onboarded but ends up chasing another career or fails the exams.
+- The False Negatives (Type2error) is more serious, as these students ended yp applying for the Uni-program but did not got permission.
+
+Alina: Current university policy may favour more sensitive models (high true positive rate, that is, high (1-Type error II), minimizing Type error II (fn = true Yes predicted as being No)); or, more specific models (low false positive rate, that is minimizing Type I error (fp = true No predicted as being Yes)).
+Perhaps in this context, minimizing the false positives (fp) would be more important because one would like to avoid that "unprepared" students get admitted to a particular program. The cost of false positives might be much higher than the price of false negatives. Accepting students who are not prepared to follow that program (i.e., fp) may increase students' abandoning the program later, failing at the exams, or pursuing a second career later). Comparatively, the cost of false negatives could be lower. The program will miss the opportunity to accept some of the "prepared" students in the program. Still, as long as this number is not too high, the society can assume this cost. 
+
+The model is acceptable, but one can impose a higher cost for fp, if desired (see a similar discussion in "Ch 9 Solutions Ex 8_update.R") and get the required cutoff.
+
+```{r Minimize False Positives (Type1error)}
+# get the cutoff probability corresponding to the minimum total cost, given that cost.fp = 2*cost.fn 
+library(ROCR)
+pred = prediction(attributes(test.pred)$probabilities[,1], Admission.test$V3, label.ordering = NULL)
+cost.perf = performance(pred, "cost", cost.fp = 2, cost.fn = 1) #evaluates the performance of the predictions in terms of cost, specifying that the cost of a false positive (cost.fp) is twice that of a false negative (cost.fn). This cost function is crucial in scenarios where the consequences of false positives and false negatives are different.
+pred@cutoffs[[1]][which.min(cost.perf@y.values[[1]])] # identifies the cutoff probability that minimizes the total cost. pred@cutoffs[[1]] contains the possible cutoff values, and cost.perf@y.values[[1]] contains the total cost for each cutoff. which.min finds the index of the minimum cost, and this index is used to select the corresponding optimal cutoff from pred@cutoffs.
+
+# 0.7533893 - it may be different for your run
+```
+
+
+```{r Test False Positives (Type1error)}
+# now check 
+library(caret)
+confusionMatrix(factor(ifelse(attributes(test.pred)$probabilities[,1] > 0.7578759, "Yes", "No")),factor(Admission.test$V3), positive = "Yes") 
+```
+
+
+
