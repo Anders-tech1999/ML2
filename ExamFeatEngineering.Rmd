@@ -1,0 +1,374 @@
+---
+title: "ExamFeatEngineering"
+output: html_document
+date: "2024-04-30"
+---
+
+#ML2 Alina part
+
+```{r dataload}
+library(readxl)
+Data <- read_excel("C:/Users/Bruger/OneDrive - Aarhus universitet/8. semester - BI/ML2 - Machine Learning 2/ML2EXAM/Data.xls")
+emp <- Data
+```
+
+```{r}
+#install.packages("visdat")
+```
+
+
+```{r packages}
+# Helper packages
+library(dplyr)    # for data manipulation
+library(ggplot2)  # for awesome graphics
+library(visdat)   # for additional visualizations
+# Feature engineering packages
+library(caret)    # for various ML tasks
+library(recipes)  # for feature engineering tasks
+```
+
+
+```{r data structure - overview}
+library(dplyr)
+# Convert all character columns in the data frame 'emp' to factors
+emp <- emp %>%
+  mutate(across(where(is.character), factor))
+glimpse(emp)
+```
+character string (<chr>): these should be transformed into categorical variables
+numeric <dbl>
+
+```{r Missing overview}
+sum(is.na(Data))
+vis_miss(Data, cluster = TRUE) #visdat library
+plot_missing(Data)
+```
+- no NA's in variables: reviewId, reviewDateTime, ratingOverall, ratingWorkLifeBalance, ratingCultureAndValues, -	ratingDiversityAndInclusion, ratingSeniorLeadership, ratingCareerOpportunities, ratingCompensationAndBenefits, lengthOfEmployment
+- NA's from 0% - 5%: employmentStatus
+- NA's from 5% - 10%: jobTitle.text
+- NA's from 10% - 40%: ratingRecommendToFriend, isCurrentJob, location.name
+- NA's from 40% -> : jobEndingYear
+
+
+## reviewId: Unique identifier for each review
+
+```{r reviewId}
+#library(tidyverse)
+library(DataExplorer)
+str(emp$reviewId)
+plot_histogram(emp$reviewId)
+```
+Will any harm come to the variable if it gets transformed into a scale from 1 --> endpoint?
+
+## reviewDateTime: Timestamp of when the review was submitted
+
+```{r reviewDateTime }
+#library(tidyverse)
+library(DataExplorer)
+str(emp$reviewDateTime)
+```
+follows the standard ISO 8601 format: YYYY-MM-DDTHH:MM:SS.fff, where:
+YYYY represents the year,
+MM the month,
+DD the day,
+T is a separator (indicating the start of the time portion),
+HH the hour (in 24-hour format),
+MM the minutes,
+SS the seconds,
+fff the milliseconds.
+- given this interpretation, the information after the T-separator is evaluated as being redundant. Therefore the variable is being transformed into a numeric obtaining the Year variable
+
+```{r Create year}
+library(lubridate) 
+# Convert 'reviewDateTime' from character to POSIXct format (if not already)
+emp$reviewDateTime <- ymd_hms(emp$reviewDateTime)
+
+# Extract the year and convert it to numeric format
+emp$reviewYear <- year(emp$reviewDateTime)
+```
+reviewYear is created being a numeric with range 2013->2024.
+
+```{r Create year;month;day}
+#library(lubridate)
+library(dplyr)
+# Convert 'reviewDateTime' from character to POSIXct format if it is not already done
+emp <- emp %>% mutate(reviewDateTime = ymd_hms(reviewDateTime))
+
+# Extract year, month, and day, then combine them into a single categorical variable
+emp <- emp %>%
+  mutate(
+    year = year(reviewDateTime),
+    month = month(reviewDateTime, label = TRUE),  #This will give the abbreviated month name
+    reviewDate = factor(paste(year, month, sep = "-"))
+  )
+```
+reviewDate is created being a factor with 40 levels.
+
+
+```{r delete redundant year month}
+#Deleting redundant variables year, month, day
+emp$year <- NULL
+emp$month <- NULL
+#reviewDateTime <- NULL
+```
+The variable reviewDateTime should also be deleted (remove #)
+
+```{r EDA reviewYear;Date }
+library(tidyverse)
+library(DataExplorer)
+library(ggplot2)
+
+library(ggplot2)
+
+# Create a bar plot
+ggplot(emp, aes(x = as.factor(reviewYear))) +
+  geom_bar(stat = "count", fill = "blue", color = "black") +  # Count is default, explicitly stating for clarity
+  labs(x = "Review Year", y = "Number of Reviews", title = "Distribution of Reviews by Year") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x labels for better visibility if needed
+
+summary(emp$reviewDate)
+```
+The reviewDateTime variable has been split into
+reviewYear
+- a numeric variable having the vast majority of observations from the year 2023. The next coming years 2022 and 2024 do also represent a fair amount of the observations. The years including 2021 and before, are bearing a very minor part of the years, as these reviews could be consideres deleted.
+reviewDate
+- categorical variable to show the distribution of observations from the different month of essentially 2023 and the existing years and months as well.
+
+## ratingOverall: Overall rating given to the company by the employee
+This is the variable to predict based on the other features
+
+```{r numeric ratingOverall}
+summary(emp$ratingOverall)
+```
+Keeping the numeric version of ratingOverall
+
+```{r Factorize/ordering ratingOverall}
+emp$facratingOverall <- factor(emp$ratingOverall)
+summary(emp$facratingOverall) 
+# Convert to an ordinal factor
+emp$facratingOverall <- factor(emp$facratingOverall, levels = c(1, 2, 3, 4, 5), ordered = TRUE)
+```
+
+```{r Histogram ratingOverall }
+histogram(emp$facratingOverall)
+
+# Load the ggplot2 library
+library(ggplot2)
+
+# Create a histogram of ratingOverall
+ggplot(emp, aes(x = facratingOverall)) +
+  geom_histogram(stat = "count", fill = "steelblue", color = "black", binwidth = 1) +
+  labs(x = "Overall Rating", y = "Frequency", title = "Distribution of Overall Ratings") +
+  theme_minimal() +
+  scale_x_discrete(limits = c("1", "2", "3", "4", "5"))  # Ensure that all rating levels are shown even if some have 0 counts
+```
+Discuss wether ratingOverall yields the best insights being numeric or being a factor?
+Do we want to obtain RMSE measures or Accuracy measures?
+
+## ratingCeo: Rating of the CEO’s performance
+
+```{r Factorize/ordering ratingCeo}
+emp$ratingCeo <- factor(emp$ratingCeo)
+summary(emp$ratingCeo) 
+# Convert to an ordinal factor
+#emp$ratingOverall <- factor(emp$ratingOverall, levels = c(1, 2, 3, 4, 5), ordered = TRUE)
+```
+
+```{r Histogram ratingCeo }
+histogram(emp$ratingCeo)
+
+# Load the ggplot2 library
+library(ggplot2)
+
+# Replace NA values with a label "NA's" and ensure all levels are included
+emp$ratingCeo <- factor(emp$ratingCeo)
+levels(emp$ratingCeo) <- c(levels(emp$ratingCeo), "NA's")  # Add "NA's" as a level
+emp$ratingCeo[is.na(emp$ratingCeo)] <- "NA's"  # Assign the label "NA's" to NA values
+
+# Create a bar plot to visualize the distribution of ratings, including NA's
+ggplot(emp, aes(x = ratingCeo, fill = ratingCeo)) +
+  geom_bar() +
+  labs(x = "CEO Rating", y = "Count", title = "Distribution of CEO Ratings Including NA's") +
+  scale_fill_brewer(palette = "Set3") +  # Optional: Adds color palette for better distinction
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+The 44% missing values is worth a discussion
+- The rating of the Ceo is of appropriate value towards the overall rating of the given company.
+- Does the NA's have a specific meaning whereas it could be categorized as "Informative Missing Values"? The anonymization of the survey does not strengthen this viewpoint.
+- could an ordering of this variable be of positive impact towards the prediction?
+
+## ratingBusinessOutlook: Rating reflecting the employee’s outlook on the business’s future
+
+```{r Factorize/ordering ratingOutlook}
+emp$ratingBusinessOutlook <- factor(emp$ratingBusinessOutlook)
+summary(emp$ratingBusinessOutlook) 
+# Convert to an ordinal factor
+#emp$ratingOverall <- factor(emp$ratingOverall, levels = c(1, 2, 3, 4, 5), ordered = TRUE)
+```
+
+```{r Histogram ratingOutlook }
+histogram(emp$ratingBusinessOutlook)
+
+# Load the ggplot2 library
+library(ggplot2)
+
+# Replace NA values with a label "NA's" and ensure all levels are included
+emp$ratingBusinessOutlook <- factor(emp$ratingBusinessOutlook)
+levels(emp$ratingBusinessOutlook) <- c(levels(emp$ratingBusinessOutlook), "NA's")  # Add "NA's" as a level
+emp$ratingBusinessOutlook[is.na(emp$ratingBusinessOutlook)] <- "NA's"  # Assign the label "NA's" to NA values
+
+# Create a bar plot to visualize the distribution of ratings, including NA's
+ggplot(emp, aes(x = ratingBusinessOutlook, fill = ratingBusinessOutlook)) +
+  geom_bar() +
+  labs(x = "BusinessOutlook Rating", y = "Count", title = "Distribution of BusinessOutlook Ratings Including NA's") +
+  scale_fill_brewer(palette = "Set3") +  # Optional: Adds color palette for better distinction
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+The 44% missing values is worth a discussion
+- The rating of the Ceo is of appropriate value towards the overall rating of the given company.
+- Does the NA's have a specific meaning whereas it could be categorized as "Informative Missing Values"? The anonymization of the survey does not srengthen this viewpoint.
+- could an ordering of this variable be of positive impact towards the prediction?
+
+The NA's present in the ratingBusinessOutlook are highly correlated with the NA's in rating CEO. What insights are valueable in this discovery?
+
+## ratingWorkLifeBalance: Rating of the company’s support for work-life balance
+This variable is not having any NA's initially.
+
+ratingWorkLifeBalance could be dealt with being numeric as well as factor. We add the factorized variable while we're keeping the numeric factor. This is to produce the EDA histogram
+
+```{r numeric summary: ratingWorkLifeBalance}
+summary(emp$ratingWorkLifeBalance)
+```
+
+```{r Factorize/ordering ratingWorkLifeBalance}
+emp$facratingWorkLifeBalance <- factor(emp$ratingWorkLifeBalance)
+summary(emp$facratingWorkLifeBalance) 
+# Convert to an ordinal factor
+emp$facratingWorkLifeBalance <- factor(emp$facratingWorkLifeBalance, levels = c(0, 1, 2, 3, 4, 5), ordered = TRUE)
+```
+
+```{r Histogram ratingWorkLifeBalance }
+histogram(emp$facratingWorkLifeBalance)
+
+# Load the ggplot2 library
+library(ggplot2)
+
+# Create a histogram of ratingOverall
+ggplot(emp, aes(x = facratingWorkLifeBalance)) +
+  geom_histogram(stat = "count", fill = "steelblue", color = "black", binwidth = 1) +
+  labs(x = "WorkLife Rating", y = "Frequency", title = "Distribution of WorkLife Balance") +
+  theme_minimal() +
+  scale_x_discrete(limits = c("0","1", "2", "3", "4", "5"))  # Ensure that all rating levels are shown even if some have 0 counts
+```
+
+## ratingCultureAndValues: Rating of the company’s culture and values
+This variable is not having any NA's initially.
+
+ratingWorkLifeBalance could be dealt with being numeric as well as factor. We add the factorized variable while we're keeping the numeric factor. This is to produce the EDA histogram
+
+```{r numeric summary: ratingCultureAndValues }
+summary(emp$ratingCultureAndValues)
+```
+
+```{r Factorize/ordering ratingCultureAndValues}
+emp$facratingCultureAndValues <- factor(emp$ratingCultureAndValues)
+summary(emp$facratingCultureAndValues) 
+# Convert to an ordinal factor
+emp$facratingCultureAndValues <- factor(emp$facratingCultureAndValues, levels = c(0, 1, 2, 3, 4, 5), ordered = TRUE)
+```
+
+```{r Histogram facratingCultureAndValues }
+histogram(emp$facratingCultureAndValues)
+
+# Load the ggplot2 library
+library(ggplot2)
+
+# Create a histogram of ratingOverall
+ggplot(emp, aes(x = facratingCultureAndValues)) +
+  geom_histogram(stat = "count", fill = "steelblue", color = "black", binwidth = 1) +
+  labs(x = "Culture Rating", y = "Frequency", title = "Distribution of Culture and Values") +
+  theme_minimal() +
+  scale_x_discrete(limits = c("0","1", "2", "3", "4", "5"))  # Ensure that all rating levels are shown even if some have 0 counts
+```
+
+## ratingDiversityAndInclusion: Rating of the company’s diversity and inclusion efforts
+This variable is not having any NA's initially.
+
+ratingWorkLifeBalance could be dealt with being numeric as well as factor. We add the factorized variable while we're keeping the numeric factor. This is to produce the EDA histogram
+
+```{r numeric summary: ratingDiversityAndInclusion}
+summary(emp$ratingDiversityAndInclusion)
+```
+
+```{r Factorize/ordering ratingDiversityAndInclusion}
+emp$facratingDiversityAndInclusion <- factor(emp$ratingDiversityAndInclusion)
+summary(emp$facratingDiversityAndInclusion) 
+# Convert to an ordinal factor
+emp$facratingDiversityAndInclusion <- factor(emp$facratingDiversityAndInclusion, levels = c(0, 1, 2, 3, 4, 5), ordered = TRUE)
+```
+
+```{r Histogram facratingDiversityAndInclusion }
+histogram(emp$facratingDiversityAndInclusion)
+
+# Load the ggplot2 library
+library(ggplot2)
+
+# Create a histogram of ratingOverall
+ggplot(emp, aes(x = facratingDiversityAndInclusion)) +
+  geom_histogram(stat = "count", fill = "steelblue", color = "black", binwidth = 1) +
+  labs(x = "Diversity Rating", y = "Frequency", title = "Distribution ofDiversity and Inclusion") +
+  theme_minimal() +
+  scale_x_discrete(limits = c("0","1", "2", "3", "4", "5"))  # Ensure that all rating levels are shown even if some have 0 counts
+```
+
+## ratingSeniorLeadership: Rating of the senior leadership team
+This variable is not having any NA's initially.
+
+ratingWorkLifeBalance could be dealt with being numeric as well as factor. We add the factorized variable while we're keeping the numeric factor. This is to produce the EDA histogram
+
+```{r numeric summary: ratingSeniorLeadership}
+summary(emp$ratingSeniorLeadership)
+```
+
+```{r Factorize/ordering ratingSeniorLeadership}
+emp$facratingSeniorLeadership <- factor(emp$ratingSeniorLeadership)
+summary(emp$facratingSeniorLeadership) 
+# Convert to an ordinal factor
+emp$facratingSeniorLeadership <- factor(emp$facratingSeniorLeadership, levels = c(0, 1, 2, 3, 4, 5), ordered = TRUE)
+```
+
+```{r Histogram facratingSeniorLeadership }
+histogram(emp$facratingSeniorLeadership)
+
+# Load the ggplot2 library
+library(ggplot2)
+
+# Create a histogram of ratingOverall
+ggplot(emp, aes(x = facratingSeniorLeadership)) +
+  geom_histogram(stat = "count", fill = "steelblue", color = "black", binwidth = 1) +
+  labs(x = "Rating of Senior Leaders", y = "Frequency", title = "Distribution Rating of Senior Leaders") +
+  theme_minimal() +
+  scale_x_discrete(limits = c("0","1", "2", "3", "4", "5"))  # Ensure that all rating levels are shown even if some have 0 counts
+```
+
+## ratingRecommendToFriend: Likelihood of an employee recommending the company to a friend
+
+## ratingCareerOpportunities: Rating of career advancement opportunities within the company
+
+## ratingCompensationAndBenefits: Rating of the compensation and benefits offered.
+
+## isCurrentJob: Indicator of whether the review is from a current employee
+
+## lengthOfEmployment: Duration of the employee’s tenure with the company
+
+## employmentStatus: Employment status, such as full-time, part-time, etc.
+
+## jobEndingYear: The year the employee’s job ended, if applicable
+
+## jobTitle.text: The job title of the reviewer
+
+## location.name: The name of the location where the reviewer works or worked
+
