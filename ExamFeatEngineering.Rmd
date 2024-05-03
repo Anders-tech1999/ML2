@@ -264,6 +264,7 @@ ggplot(emp, aes(x = facratingWorkLifeBalance)) +
   scale_x_discrete(limits = c("0","1", "2", "3", "4", "5"))  # Ensure that all rating levels are shown even if some have 0 counts
 ```
 
+
 ## ratingCultureAndValues: Rating of the company’s culture and values
 This variable is not having any NA's initially.
 
@@ -293,6 +294,7 @@ ggplot(emp, aes(x = facratingCultureAndValues)) +
   theme_minimal() +
   scale_x_discrete(limits = c("0","1", "2", "3", "4", "5"))  # Ensure that all rating levels are shown even if some have 0 counts
 ```
+
 
 ## ratingDiversityAndInclusion: Rating of the company’s diversity and inclusion efforts
 This variable is not having any NA's initially.
@@ -324,6 +326,7 @@ ggplot(emp, aes(x = facratingDiversityAndInclusion)) +
   scale_x_discrete(limits = c("0","1", "2", "3", "4", "5"))  # Ensure that all rating levels are shown even if some have 0 counts
 ```
 
+
 ## ratingSeniorLeadership: Rating of the senior leadership team
 This variable is not having any NA's initially.
 
@@ -354,17 +357,196 @@ ggplot(emp, aes(x = facratingSeniorLeadership)) +
   scale_x_discrete(limits = c("0","1", "2", "3", "4", "5"))  # Ensure that all rating levels are shown even if some have 0 counts
 ```
 
+
+
 ## ratingRecommendToFriend: Likelihood of an employee recommending the company to a friend
+
+The 39% missing values are worth a discussion
+```{r Factorize/ordering ratingRecommendToFriend}
+#emp$ratingRecommendToFriend <- factor(emp$ratingRecommendToFriend) THIS operation is already performed.
+summary(emp$ratingRecommendToFriend) 
+# Convert to an ordinal factor
+#emp$ratingOverall <- factor(emp$ratingOverall, levels = c(1, 2, 3, 4, 5), ordered = TRUE)
+```
+Converting this to ordinal requires handling of missings.
+Missings could be transformed into a category of NA, with an assumption of not answering this question leads to a specific ordered value in relation to Positive and negative.
+
+```{r Histogram ratingOutlook }
+histogram(emp$ratingRecommendToFriend)
+
+# Load the ggplot2 library
+library(ggplot2)
+
+# Replace NA values with a label "NA's" and ensure all levels are included
+emp$ratingRecommendToFriend <- factor(emp$ratingRecommendToFriend)
+levels(emp$ratingRecommendToFriend) <- c(levels(emp$ratingRecommendToFriend), "NA's")  # Add "NA's" as a level
+emp$ratingRecommendToFriend[is.na(emp$ratingRecommendToFriend)] <- "NA's"  # Assign the label "NA's" to NA values
+
+# Create a bar plot to visualize the distribution of ratings, including NA's
+ggplot(emp, aes(x = ratingRecommendToFriend, fill = ratingRecommendToFriend)) +
+  geom_bar() +
+  labs(x = "Recommend to Friend Rating", y = "Count", title = "Distribution of Recommend to Friend Ratings Including NA's") +
+  scale_fill_brewer(palette = "Set3") +  # Optional: Adds color palette for better distinction
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+The 39% missing values is worth a discussion
+- Does the NA's have a specific meaning whereas it could be categorized as "Informative Missing Values"? The anonymization of the survey does not srengthen this viewpoint.
+- could an ordering of this variable be of positive impact towards the prediction?
 
 ## ratingCareerOpportunities: Rating of career advancement opportunities within the company
 
+This variable is not having any NA's initially.
+
+ratingCareerOpportunities could be dealt with being numeric as well as factor. We add the factorized variable while we're keeping the numeric factor. This is to produce the EDA histogram
+
+```{r numeric summary: ratingCareerOpportunities}
+summary(emp$ratingCareerOpportunities)
+```
+
+```{r Factorize/ordering ratingCareerOpportunities}
+emp$facratingCareerOpportunities <- factor(emp$ratingCareerOpportunities)
+summary(emp$facratingCareerOpportunities) 
+# Convert to an ordinal factor
+emp$facratingCareerOpportunities <- factor(emp$facratingCareerOpportunities, levels = c(0, 1, 2, 3, 4, 5), ordered = TRUE)
+```
+
+```{r Histogram facratingCareerOpportunities }
+histogram(emp$facratingCareerOpportunities)
+
+# Load the ggplot2 library
+library(ggplot2)
+
+# Create a histogram of facratingCareerOpportunities
+ggplot(emp, aes(x = facratingCareerOpportunities)) +
+  geom_histogram(stat = "count", fill = "steelblue", color = "black", binwidth = 1) +
+  labs(x = "Rating of Career Opportunities", y = "Frequency", title = "Distribution Rating of Career Opportunities") +
+  theme_minimal() +
+  scale_x_discrete(limits = c("0","1", "2", "3", "4", "5"))  # Ensure that all rating levels are shown even if some have 0 counts
+```
+
+
+
+
+
 ## ratingCompensationAndBenefits: Rating of the compensation and benefits offered.
+
+This variable is not having any NA's initially.
+
+ratingCompensationAndBenefits could be dealt with being numeric as well as factor. We add the factorized variable while we're keeping the numeric factor. This is to produce the EDA histogram
+
+```{r numeric summary: ratingCompensationAndBenefits}
+summary(emp$ratingCompensationAndBenefits)
+```
+
+```{r Factorize/ordering ratingCompensationAndBenefits}
+emp$facratingCompensationAndBenefits <- factor(emp$ratingCompensationAndBenefits)
+summary(emp$facratingCompensationAndBenefits) 
+# Convert to an ordinal factor
+emp$facratingCompensationAndBenefits <- factor(emp$facratingCompensationAndBenefits, levels = c(0, 1, 2, 3, 4, 5), ordered = TRUE)
+```
+
+```{r Histogram facratingCareerOpportunities }
+histogram(emp$facratingCompensationAndBenefits)
+
+# Load the ggplot2 library
+library(ggplot2)
+
+# Create a histogram of facratingCompensationAndBenefits
+ggplot(emp, aes(x = facratingCompensationAndBenefits)) +
+  geom_histogram(stat = "count", fill = "steelblue", color = "black", binwidth = 1) +
+  labs(x = "Rating of Compensation and Benefits", y = "Frequency", title = "Distribution Rating of Compensation and Benefits") +
+  theme_minimal() +
+  scale_x_discrete(limits = c("0","1", "2", "3", "4", "5"))  # Ensure that all rating levels are shown even if some have 0 counts
+```
+
+
 
 ## isCurrentJob: Indicator of whether the review is from a current employee
 
+```{r isCurrentJob initial summary}
+summary(emp$isCurrentJob)
+```
+The 39% missing values are being evaluated as "Informative missing values" (Kuhn and Johnson 2013). As the variable only contains 1s and NAs, these NAs are indeed an informative missing value which requires being transformed into 0s.
+```{r IsCurrent Job NA into 0 mutation}
+library(dplyr)
+# Replace NA values with 0s
+emp <- emp %>% 
+  mutate(isCurrentJob = replace_na(isCurrentJob, 0))
+summary(emp$isCurrentJob)
+```
+From this summary we now that the distribution of 1s are 60,86%. Below the distribution is shown with factors 1 and 0.
+
+
+```{r Histogram isCurrentJob }
+emp$facisCurrentJob <- factor(emp$isCurrentJob)
+summary(emp$facisCurrentJob) 
+# Convert to an ordinal factor
+#emp$facratingCompensationAndBenefits <- factor(emp$facratingCompensationAndBenefits, levels = c(0, 1, 2, 3, 4, 5), ordered = TRUE)
+
+histogram(emp$isCurrentJob)
+
+library(ggplot2)
+# Create a bar plot to visualize the distribution of ratings, including NA's
+ggplot(emp, aes(x = facisCurrentJob, fill = facisCurrentJob)) +
+  geom_bar() +
+  labs(x = "Is/Is not Current in job Distribution", y = "Count", title = "Distribution of Is/Is not Current in job") +
+  scale_fill_brewer(palette = "Set3") +  # Optional: Adds color palette for better distinction
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
 ## lengthOfEmployment: Duration of the employee’s tenure with the company
 
+```{r lengthOfEmployment initial summary}
+summary(emp$lengthOfEmployment)
+```
+
+```{r Histogram lengthOfEmployment }
+emp$faclengthOfEmployment <- factor(emp$lengthOfEmployment)
+summary(emp$faclengthOfEmployment) 
+# Convert to an ordinal factor
+#emp$facratingCompensationAndBenefits <- factor(emp$facratingCompensationAndBenefits, levels = c(0, 1, 2, 3, 4, 5), ordered = TRUE)
+
+histogram(emp$faclengthOfEmployment)
+
+library(ggplot2)
+# Create a bar plot to visualize the distribution of ratings, including NA's
+ggplot(emp, aes(x = faclengthOfEmployment, fill = faclengthOfEmployment)) +
+  geom_bar() +
+  labs(x = "Employment lenght Distribution", y = "Count", title = "Distribution of Employment lenght") +
+  scale_fill_brewer(palette = "Set3") +  # Optional: Adds color palette for better distinction
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+The lengthOfEmployment has a right skewed distribution with the vast majority of employees being in the company for less than a year or less than 2 year. The mean is 1,6 whereas the median is 1 as well. The employees do not stay in the company for lang given this insight.
+
+
+
 ## employmentStatus: Employment status, such as full-time, part-time, etc.
+
+```{r employmentStatus initial summary}
+summary(emp$employmentStatus)
+```
+The 0.4% missing values are being evaluated as MAR "Missing At Random " (Little and Rubin 2014). As the variable only contains 0.4% NAs, these NAs are imputed with KNN-impuation with 3 neighbours.
+
+```{r KNN impuation into new empImputed}
+if (!require(DMwR, quietly = TRUE)) {
+    install.packages("DMwR")
+}
+library(DMwR)
+# KNN imputation
+set.seed(123)  # Set seed for reproducibility
+empImputed <- knnImputation(empImputed$employmentStatus, k = 3)
+summary(empImputed$employmentStatus)
+```
+
+- Recipe implementation:
+with KNN imputation for all predictors
+df_recipe %>%
+  step_knnimpute(all_predictors(), neighbors = 5) #5 neighbours as defualt
+
 
 ## jobEndingYear: The year the employee’s job ended, if applicable
 
