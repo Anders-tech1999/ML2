@@ -146,7 +146,7 @@ empFactor$isCurrentJob <- factor(empFactor$isCurrentJob)
 summary(empFactor$isCurrentJob)
 ```
 isCurrentJob:
-- the 39% missing values are being evaluated as "Informative missing values" (Kuhn and Johnson 2013). As the variable only contains 1s and NAs, these NAs are indeed an informative missing value which requires being transformed into 0s.
+- the 39% missing values are being evaluated as "Informative missing values" (Kuhn and Johnson 2013). As the variable only contains 1s and NAs, these NAs are indeed an informative missing value which requires being transformed into 0s. 
 
 Deleting variables: jobEndingYear,jobTitle.text,location.name
 
