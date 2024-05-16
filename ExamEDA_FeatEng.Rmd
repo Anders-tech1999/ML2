@@ -540,7 +540,7 @@ number_of_unique_job_titles
 
 ## location.name: The name of the location where the reviewer works or worked
 
-- - Deleting this variable as we have a huge amount of different location anmes, namely 1201 various instances, whereas these do not contribute with anything but noise to the dataset.
+- - Deleting this variable as we have a huge amount of different location anmes, namely 1201 various instances, whereas these do not contribute with anything but noise to the dataset. 
 
 ```{r count of unique location.name}
 unique_location.name <- unique(emp$location.name)
