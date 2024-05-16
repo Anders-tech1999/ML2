@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 
 # Alina part - Numeric
 
@@ -213,4 +214,221 @@ set.seed(123) # Set a random seed for replication purposes
 job_split <- initial_split(emp, prop = 0.80, strata = "ratingOverall")
 job_train  <- training(job_split)
 job_test   <- testing(job_split)
+=======
+
+# Alina part - Numeric
+
+```{r dataload}
+library(readxl)
+Data <- read_excel("C:/Users/Bruger/OneDrive - Aarhus universitet/8. semester - BI/ML2 - Machine Learning 2/ML2EXAM/Data.xls")
+empNumeric <- Data
+```
+
+```{r}
+#install.packages("visdat")
+```
+
+
+```{r packages}
+# Helper packages
+library(dplyr)    # for data manipulation
+library(ggplot2)  # for awesome graphics
+library(visdat)   # for additional visualizations
+# Feature engineering packages
+library(caret)    # for various ML tasks
+library(recipes)  # for feature engineering tasks
+```
+
+
+```{r data structure - overview}
+library(dplyr)
+glimpse(empNumeric)
+```
+character string (<chr>): these should be transformed into categorical variables
+numeric <dbl>
+
+```{r Missing overview}
+library(visdat)
+sum(is.na(empNumeric))
+vis_miss(empNumeric, cluster = TRUE) #visdat library
+plot_missing(empNumeric)
+```
+- no NA's in variables: reviewId, reviewDateTime, ratingOverall, ratingWorkLifeBalance, ratingCultureAndValues, -	ratingDiversityAndInclusion, ratingSeniorLeadership, ratingCareerOpportunities, ratingCompensationAndBenefits, lengthOfEmployment
+- NA's from 0% - 5%: employmentStatus
+- NA's from 5% - 10%: jobTitle.text
+- NA's from 10% - 40%: ratingRecommendToFriend, isCurrentJob, location.name
+- NA's from 40% -> : jobEndingYear
+
+
+## reviewId: Unique identifier for each review
+
+```{r reviewId}
+library(tidyverse)
+library(DataExplorer)
+str(empNumeric$reviewId)
+empNumeric$reviewId <- NULL
+```
+DELETE THIS VARIABLE
+
+## reviewDateTime: Timestamp of when the review was submitted
+
+```{r reviewDateTime }
+str(empNumeric$reviewDateTime)
+```
+follows the standard ISO 8601 format: YYYY-MM-DDTHH:MM:SS.fff, where:
+YYYY represents the year,
+MM the month,
+DD the day,
+T is a separator (indicating the start of the time portion),
+HH the hour (in 24-hour format),
+MM the minutes,
+SS the seconds,
+fff the milliseconds.
+- given this interpretation, the information after the T-separator is evaluated as being redundant. Therefore the variable is being transformed into a numeric obtaining the Year variable
+
+```{r Create year}
+library(lubridate) 
+# Convert 'reviewDateTime' from character to POSIXct format (if not already)
+empNumeric$reviewDateTime <- ymd_hms(empNumeric$reviewDateTime)
+
+# Extract the year and convert it to numeric format
+empNumeric$reviewYear <- year(empNumeric$reviewDateTime)
+```
+reviewYear is created being a numeric with range 2013->2024.
+
+```{r EDA reviewYear}
+library(tidyverse)
+library(DataExplorer)
+library(ggplot2)
+
+# Create a bar plot
+ggplot(empNumeric, aes(x = as.factor(reviewYear))) +
+  geom_bar(stat = "count", fill = "blue", color = "black") +  # Count is default, explicitly stating for clarity
+  labs(x = "Review Year", y = "Number of Reviews", title = "Distribution of Reviews by Year") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x labels for better visibility if needed
+
+summary(empNumeric$reviewYear)
+
+```
+The reviewDateTime variable has been split into
+reviewYear
+- a numeric variable having the vast majority of observations from the year 2023. The next coming years 2022 and 2024 do also represent a fair amount of the observations. The years including 2021 and before, are bearing a very minor part of the years, as these reviews could be consideres deleted.
+
+
+## ratingOverall: Overall rating given to the company by the employee
+This is the variable to predict based on the other features
+
+```{r Factorize/ordering ratingOverall}
+empNumeric$ratingOverall <- factor(empNumeric$ratingOverall)
+summary(empNumeric$ratingOverall)
+# Convert to an ordinal factor
+empNumeric$ratingOverall <- factor(empNumeric$ratingOverall, levels = c(1, 2, 3, 4, 5), ordered = TRUE)
+```
+Making the variable ordinal scaled: ordered = TRUE
+
+```{r Histogram ratingOverall }
+histogram(empNumeric$ratingOverall)
+
+# Load the ggplot2 library
+library(ggplot2)
+
+# Create a histogram of ratingOverall
+ggplot(empNumeric, aes(x = ratingOverall)) +
+  geom_histogram(stat = "count", fill = "steelblue", color = "black", binwidth = 1) +
+  labs(x = "Overall Rating", y = "Frequency", title = "Distribution of Overall Ratings") +
+  theme_minimal() +
+  scale_x_discrete(limits = c("1", "2", "3", "4", "5"))  # Ensure that all rating levels are shown even if some have 0 counts
+```
+Discuss wether ratingOverall yields the best insights being numeric or being a factor?
+Do we want to obtain RMSE measures or Accuracy measures? 
+
+COMMON ANSWER: make into ordinal scale
+
+#DEALING WITH MISSING
+
+```{r isCurrentJob replacing NAs with 0}
+library(dplyr)
+# Replace NA values with 0s
+empNumeric <- empNumeric %>% 
+  mutate(isCurrentJob = replace_na(isCurrentJob, 0))
+summary(empNumeric$isCurrentJob)
+```
+isCurrentJob:
+- the 39% missing values are being evaluated as "Informative missing values" (Kuhn and Johnson 2013). As the variable only contains 1s and NAs, these NAs are indeed an informative missing value which requires being transformed into 0s.
+
+
+Deleting variables: jobEndingYear,jobTitle.text,location.name
+
+jobEndingYear
+- deleting this variable due to the 61% Missings. As support for this deletion, the variable isCurrentJob is evaluated as having an adequate extent of information given in jobEndingYear.
+
+jobTitle.text
+- Deleting this variable as we have a huge amount of different jobtitles, namely 2733 various instances, whereas these do not contribute with anything but noise to the dataset.
+
+location.name
+- Deleting this variable as we have a huge amount of different location anmes, namely 1201 various instances, whereas these do not contribute with anything but noise to the dataset.
+
+
+```{r Delete jobEndingYear;jobTitle.text;location.name}
+empNumeric <- subset(empNumeric, select = -c(jobEndingYear))
+empNumeric <- subset(empNumeric, select = -c(jobTitle.text))
+empNumeric <- subset(empNumeric, select = -c(location.name))
+```
+
+Deleting NAs for the four variables and prevent making imputations, because it is assumed that it is easier to impute a value there is numeric compared to a variable there are based on your feelings and opinions
+```{r Delete NAs ratingCeo;ratingBusinessOutlook;employmentStatus;ratingRecommendToFriend}
+empNumeric <- empNumeric[!is.na(empNumeric$ratingCeo), ]
+empNumeric <- empNumeric[!is.na(empNumeric$ratingBusinessOutlook), ]
+empNumeric <- empNumeric[!is.na(empNumeric$employmentStatus), ]
+empNumeric <- empNumeric[!is.na(empNumeric$ratingRecommendToFriend), ]
+
+sum(is.na(empNumeric))
+```
+
+From Exploratory Data Analysis is seen in the dataset, that 310 respondents is scoring ratingOverall with a value from 3-5 and at the same score 
+- ratingCareerOpportunities,
+- ratingCompensationAndBenefits,
+- ratingCultureAndValues,
+- ratingDiversityAndInclusion,
+- ratingSeniorLeadership,
+- ratingWorkLifeBalance
+to zero. This is assessed being a flawed respondent, as it is assumed that this respondent does not take a stand on the above listed question-categories.
+```{r deleting instances having 0s in several categorical 0-5 and ratingOverall 3-5}
+# Since there's still some giving 0's another subset of data will be made, deleting all the rows where 
+# the respondant answered 0
+empNumeric <- empNumeric[!(empNumeric$ratingCareerOpportunities == 0 |
+                         empNumeric$ratingCompensationAndBenefits == 0 |
+                         empNumeric$ratingCultureAndValues == 0 |
+                         empNumeric$ratingDiversityAndInclusion == 0 |
+                         empNumeric$ratingSeniorLeadership == 0 |
+                         empNumeric$ratingWorkLifeBalance == 0), ]
+plot_histogram(empNumeric)
+```
+
+ratingCeo, ratingBusinessOutlook, ratingRecommendToFriend, employmentStatus
+- factorizing these variables into categorical variables.
+
+lengthOfEmployment
+- scaling lenght of employment
+```{r Factorize categorical variables + scaling}
+empNumeric$ratingCeo <- factor(empNumeric$ratingCeo)
+empNumeric$ratingBusinessOutlook <- factor(empNumeric$ratingBusinessOutlook)
+empNumeric$ratingRecommendToFriend <- factor(empNumeric$ratingRecommendToFriend)
+empNumeric$employmentStatus <- factor(empNumeric$employmentStatus)
+
+empNumeric$lengthOfEmployment <- scale(empNumeric$lengthOfEmployment)
+
+glimpse(empNumeric)
+```
+
+# MODEL DEVELOPMENT
+
+```{r Boysen}
+library(rsample)
+set.seed(123) # Set a random seed for replication purposes
+job_split <- initial_split(emp, prop = 0.80, strata = "ratingOverall")
+job_train  <- training(job_split)
+job_test   <- testing(job_split)
+>>>>>>> 63dc1c65cf50349f1b453a9fccae7d737922855f
 ```
