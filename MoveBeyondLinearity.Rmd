@@ -1,0 +1,262 @@
+
+# CH 7 EX. SOLUTIONS_ update
+
+Chapter 7. Moving Beyond Linearity, ISL - Solutions to Applied Ex. 6-10
+
+```{r packages}
+#install.packages("ISLR")
+library(ISLR)
+attach(Wage)
+library(boot)
+```
+
+## Ex. 6 Wage/Age GLM + Stepfunction
+In this exercise, you will further analyze the Wage data set considered
+throughout this chapter.
+
+### 6a Perform polynomial regression
+a) Perform polynomial regression to predict wage using age. Use
+cross-validation to select the optimal degree d for the polynomial. What degree was chosen, and how does this compare to the results of hypothesis testing using ANOVA? Make a plot of the resulting polynomial fit to the data.
+
+Requires: polynomial regression of Wage ~ Age 
+- select optimal degree using k-fold cross-validation method
+- compare with ANOVA method 
+- plot the polynomial fit to the data
+```{r dataload}
+Wage <- Wage
+Data <- Wage
+```
+
+```{r GLM: Generalized Linear Model}
+set.seed(123)
+    
+cv.error = rep(NA, 10) # vector 
+  for (i in 1:10) {
+    fit.i = glm(wage ~ poly(age, i), data=Wage) #the i is looping thrpugh 10 degrees of the GLModel
+    cv.error[i] = cv.glm(Wage, fit.i, K=10)$delta[2] # function cv.glm()
+  }
+cv.error # MSE
+which.min(cv.error)
+min(cv.error)
+
+# Plot cv error for better evaluation. We want to select the model with a small MSE but still parsimonius (påholdende, sparsommelig, nærig)
+plot(1:10, cv.error, xlab="Degree", ylab="CV error", type="l", pch=20, lwd=2, ylim=c(1590, 1700))
+# Include std dev. lines
+min.point = min(cv.error)
+sd.points = sd(cv.error)
+abline(h=min.point + 0.2 * sd.points, col="red", lty="dashed")
+abline(h=min.point - 0.2 * sd.points, col="red", lty="dashed")
+legend("topright", "0.2-standard deviation lines", lty="dashed",col="red")
+```
+The minimum MSE: 1592.748 on the 10th cv-model
+Alina Concl:    
+- degree = 2 - generates a sig. decrease in MSE vs. degree 1; 
+- degree = 3 - gives us a reasonably smaller error; 
+- degree = 4 or 7 could also be an option.
+
+AL concl:
+- we might choose GLM with 3rd degree whereas it falls within the sd-lines, whereas we alwyas strive for the simplest model possible
+
+An ANOVA test is performed to support the decision of the quantity of degrees in the GLModel
+```{r ANOVA test as support for degree decision}
+# ANOVA test to complement and decide
+    fit.1 = lm(wage~poly(age, 1), data=Wage)
+    fit.2 = lm(wage~poly(age, 2), data=Wage)
+    fit.3 = lm(wage~poly(age, 3), data=Wage)
+    fit.4 = lm(wage~poly(age, 4), data=Wage)
+    fit.5 = lm(wage~poly(age, 5), data=Wage)
+    fit.6 = lm(wage~poly(age, 6), data=Wage)
+    fit.7 = lm(wage~poly(age, 7), data=Wage)
+    fit.8 = lm(wage~poly(age, 8), data=Wage)
+    fit.9 = lm(wage~poly(age, 9), data=Wage)
+    fit.10 = lm(wage~poly(age, 10), data=Wage)
+anova(fit.1, fit.2, fit.3, fit.4, fit.5, fit.6, fit.7, fit.8, fit.9, fit.10)
+# Concl: the decrease in RSS after d = 3 is not sig. => select degree=3
+  
+# Plot fit for polynomial model with d = 3
+lm.fit = lm(wage~poly(age, 3), data=Wage) # fit
+agelims = range(Wage$age)
+age.grid = seq(from=agelims[1], to=agelims[2]) # the grid
+lm.pred = predict(lm.fit, data.frame(age=age.grid), se = TRUE) #  predict
+se.bands=cbind(lm.pred$fit+2*lm.pred$se.fit,lm.pred$fit-2*lm.pred$se.fit) # se
+    
+par(mfrow=c(1,1)) 
+plot(age,wage,xlim=agelims,cex=.5,col="darkgrey")
+title("Degree-3 Polynomial",outer=T)
+lines(age.grid,lm.pred$fit,lwd=2,col="blue")
+matlines(age.grid,se.bands,lwd=1,col="blue",lty=3)
+# Concl: Ages between approx. 40-60 are related to highest wage.
+```
+ANOVA-output
+- It is seen from the p-values, that the significance changes from the 3rd to the 4th degree of the GLModel: we decide on the 3rd degree GLModel
+
+Plot 3rd-degree GLModel
+- It is seen from the plot, that the highest wages are obtained from approx 35-40 until approx 60 years olds.
+
+### 6b Step function
+b) Fit a step function to predict wage using age, and perform crossvalidation to choose the optimal number of cuts. Make a plot of the fit obtained.
+
+Requires: Step function of Wage ~ Age
+- Cut Age, but how many cuts? Perform k-fold cv to select the number of cuts that minimizes CV error
+- fit and plot the model
+
+```{r Step function - Wage ~ Age }
+all.cvs = rep(NA, 10)
+  for (i in 2:10) {
+    Wage$age.cut = cut(Wage$age, i)  #  cut() the variable in i intervals of equal length
+    lm.fit = glm(wage ~ age.cut, data=Wage)
+    all.cvs[i] = cv.glm(Wage, lm.fit, K=10)$delta[2]
+  }
+
+coef(summary(lm.fit)) # interpret the coefficients (hint: p. 269 ISL)
+```
+Intercept
+- shows the dicrete bins of age intervals
+- age.cut (24.2,30.4] goes from age 24.2 years until 30.4 years old
+- age.cut baseline is the age less than 24.2 years old
+
+Estimate
+- yeilds the wage value, which this age.cut-interval is higher than the baseline
+- e.g. age.cut (24.2,30.4] is earning 24.35 units of wage MORE than the baseline (age less than 24.2)
+
+
+```{r Step function - Plot}
+plot(2:10, all.cvs[-1], xlab="Number of cuts", ylab="CV error", type="l", pch=20, lwd=2)
+# Concl: plot shows that cv error is minimum for 8 cuts
+
+# Plot the data and fit the model
+plot(wage~age, data=Wage, col="black")
+agelims = range(Wage$age)
+age.grid = seq(from=agelims[1], to=agelims[2])
+lm.fit = glm(wage~cut(age, 8), data=Wage)
+lm.pred = predict(lm.fit, data.frame(age=age.grid))
+lines(age.grid, lm.pred, col="blue", lwd=3)
+# Same conclusion: Ages between approx. 40-60 are related to highest wage.   
+```
+CVerror///NumberOfCuts Plot
+- Decreasing CVerror until 8 cuts, which means creating more bins/cuts helps the model capturing more patterns and/or relationships between age and wage (improving accuracy)
+
+StepFunction Age///Wage Plot
+- showing the same as the 3rd degree GLModel: that the highest wages are obtained from approx 35-40 until approx 60 years olds.
+
+## EX. 7 Wage/Maritl;JobClass;etc
+
+### 7a 
+The Wage data set contains a number of other features not explored in this chapter, such as marital status (maritl), job class (jobclass), and others. Explore the relationships between some of these other predictors and wage, and use non-linear fitting techniques in order to fit flexible models to the data. Create plots of the results obtained, and write a summary of your findings.
+
+Requires: Wage ~ Marital status + Jobclass  (IV are both categorical)
+- explore data first
+- fit a model and plot
+```{r EDA MaritalStatus + JobClass}
+summary(Wage$maritl)
+summary(Wage$jobclass)
+par(mfrow = c(1, 2), mar = c(4.5, 4.5, 1,1), oma = c(0,0,4,0))
+plot(Wage$maritl, Wage$wage, cex.axis=0.70)
+plot(Wage$jobclass, Wage$wage, cex.axis=0.70)
+```
+Marital Status
+- Married couple tend to earn more money on average than other groups. 
+- Never married is having the lowest average wage across all categories
+
+JobClass
+- Informational jobs tend to be higher-wage than industrial jobs on average.
+
+
+```{r Linear Regression: Wage///intercept+maritl }
+# a) Step functions
+# [NOTE: polynomials do not make sense for qualitative predictors]
+fit0 = lm(wage ~1,data = Wage) #using no predictors, only the intercept. This is essentially modeling the mean of the wage
+#deviance(fit0) THIS IS RSS FOR CALC OF R^2
+    
+fit1 = lm(wage ~ maritl, data = Wage)
+#deviance(fit1) # here deviance = RSS (unexplained or residuals variance)
+    
+#(5222086-4858941)/5222086  # to get the explained variance
+# [1] 0.06954022 (the R_squared)
+summary(fit1)
+```
+Wage///Maritl
+- output shows baseline and how much the other categopries earns more than the baseline. Be aware of the significance whereas some categories are not significant.
+
+```{r Linear Regression: Wage///JobClass+maritlXjobClass }
+fit2 = lm(wage ~ jobclass, data = Wage)
+#deviance(fit2)
+    
+fit3 = lm(wage ~ maritl + jobclass, data = Wage)
+#deviance(fit3)
+summary(fit3)
+```
+Look into fit1 for interpretation
+
+```{r ANOVA: compare fit1;2;3 }
+anova (fit1, fit2, fit3) # only to compare fit3 with fit1 and fit2 - these models are nested in fit3
+```
+NEED EXPLANATION
+BOOKMARK 16/5-24
+
+```{r a) Step functions }
+# To interpret first identify which is ref category
+contrasts(Wage$maritl) # Never Married is the reference category
+contrasts(Wage$jobclass) # Industrial is the reference category
+    
+# Concl: 
+# Married and Divorced people seem to have a sig. higher wage than Never Married. 
+# Widowed and Separated do not differ significantly from Never Married.
+# Information jobs have sig. higher wages than industrial jobs.
+```
+
+
+```{r a) Step functions }
+fit3$residuals
+    plot(fit3)
+    
+     # OBS: The assumptions behind the model are: the errors are normally distributed 
+     #      and the variance across groups is homogeneous.This is not fulfilled as shown below: 
+    
+                # Analysis of Variance
+                  res.aov <- aov(wage ~ maritl, data = Wage)
+                  summary(res.aov)
+                # Compare the means 
+                  TukeyHSD(res.aov)
+                # Check assumptions
+                  plot(res.aov, 2) # normality of residuals is rejected
+                  library(car)
+                  leveneTest(wage ~ maritl, data = Wage) #Variance homogeneity rejected
+                # Applying Kruskal non-parametric test if assumptions not fulfilled
+                  kruskal.test(wage ~ maritl, data = Wage)
+                  kruskal.test(wage ~ jobclass, data = Wage)
+                 
+  # b) Splines cannot be run when we have categorical variables among the predictors
+  # c) GAMs with a smoothing spline df=4 for age
+    library(gam)
+    fit = gam::gam(wage ~ maritl + jobclass + s(age, 4), data = Wage)
+    deviance(fit)
+    summary(fit)
+  # There seems to be a nonlinear sig. effect of degree 4 of age on wage 
+  # Plot
+    par(mfrow=c(1,3))
+    plot.Gam(fit, se=TRUE,col="blue",main="GAM with smooth splines for age")
+  # Interpretation: 
+    # We can visually assess the relative contribution of the variables 
+    # as the graphs have the same vertical scale. 
+    # Age seems to be the most important. 
+    # Note the high variance for Widow, Divorce and Separated groups makes 95%CI very broad 
+    # for those groups. We can also see there are few obs in these groups. 
+    table(Wage$maritl)
+```
+
+
+
+# Ch 7_Lab 1 and 2 _Rcode
+
+
+
+
+
+
+
+
+# Ch 7 HOM _ s
+
+
+
