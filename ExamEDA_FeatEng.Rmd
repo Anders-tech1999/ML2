@@ -1104,8 +1104,3 @@ unique_location.name <- unique(emp$location.name)
 number_of_unique_location.name <- length(unique_location.name)
 number_of_unique_location.name
 ```
-
-
->>>>>>> 63dc1c65cf50349f1b453a9fccae7d737922855f
-
-Orale
