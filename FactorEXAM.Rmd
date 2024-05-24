@@ -140,9 +140,9 @@ Do we want to obtain RMSE measures or Accuracy measures?
 
 Discretizing ratingOverall into new variable
 ```{r low and highratingOverall}
-empFactor$HighratingOverall_binary <- factor(ifelse(empFactor$ratingOverall < 3, "0", "1"))
+empFactor$HighratingOverallBinary <- factor(ifelse(empFactor$ratingOverall < 3, "0", "1"))
 
-head(empFactor$HighratingOverall_binary)
+head(empFactor$HighratingOverallBinary)
 
 #Deleting on er the other DV
 #empFactor$ratingOverall <- NULL 
@@ -305,7 +305,7 @@ set.seed(123)
 random_indices <- sample(1:nrow(empFactorBinary), 1000)
 subempFactor <- empFactorBinary[random_indices, ]
 
-subsplit  <- initial_split(subempFactor, prop = 0.7, strata = "HighratingOverall_binary") #Important to distinguish between binary and 5-level variable!
+subsplit  <- initial_split(subempFactor, prop = 0.7, strata = "HighratingOverallBinary") #Important to distinguish between binary and 5-level variable!
 subtrain <- training(subsplit)
 subtest  <- testing(subsplit)
 
@@ -718,6 +718,250 @@ table(Caravan.test$Purchase, lm.pred)
 
 # Note: In applications one can use other popular performance measures (AUC,recall, ...) as discussed in the first part of the curriculum (ISL p. 147-149). 
 ```
+
+
+
+
+#SVM HOM
+
+```{r helper packages}
+# Helper packages
+library(dplyr)    # for data wrangling
+library(ggplot2)  # for awesome graphics
+library(rsample)  # for data splitting
+library(modeldata) # for data set Job attrition
+
+
+# Modeling packages
+library(caret)    # meta-engine for SVMs
+library(kernlab)  # also for fitting SVMs 
+
+# Model interpretability packages
+library(pdp)      # for partial dependence plots, etc.
+library(vip)      # for variable importance plots
+```
+
+```{r datasplit}
+dim(subtrain)
+dim(subtest)
+prop.table(table(empFactorBinary$HighratingOverallBinary)) 
+```
+
+Tuning and fitting SVM with a radial basis kernel (C and sigma as hyperparameters)
+- below we use caret’s train() function to tune and train an SVM using the radial basis 
+- kernel function with autotuning for the sigma parameter (i.e., "svmRadialSigma") and 10-fold CV.
+```{r Tune SVM - radial kernel}
+set.seed(123)  
+churn_svm <- train(
+  HighratingOverallBinary ~ ., 
+  data = subtrain,
+  method = "svmRadial",               
+  preProcess = c("center", "scale"),  
+  trControl = trainControl(method = "cv", number = 10),
+  tuneLength = 10
+)
+```
+
+```{r Plot SVM}
+ggplot(churn_svm) + theme_light()
+
+# Print results
+churn_svm$bestTune 
+churn_svm$results 
+# notice the default is accuracy
+```
+from Plotting and results from radial kernel SVM, smaller values of cost is beneficial for the accuracy on this dataset case.
+- the cost = 0.50 yields: 
+- the highest accuracy measure 0.9384
+- a sigma value of 0.01541844
+
+```{r}
+confusionMatrix(churn_svm)
+```
+On SVM without probability classes
+- Accuracy: 0.9385
+
+We calculate the probability classes to b able to obtain AUC/ROC measurements
+```{r Class probabilities to obtain AUC/ROC}
+ctrl <- trainControl(
+  method = "cv", 
+  number = 10, 
+  classProbs = TRUE,             
+  summaryFunction = twoClassSummary  # also needed for AUC/ROC
+)
+```
+
+```{r rescaling DV as getting strange format error}
+levels(subtrain$HighratingOverallBinary) <- make.names(levels(subtrain$HighratingOverallBinary), unique=TRUE)
+
+levels(subtrain$HighratingOverallBinary)
+```
+
+
+```{r Tune SVM with ROC/AUC}
+# Tune an SVM
+set.seed(123)  
+churn_svm_auc <- train(
+  HighratingOverallBinary ~ ., 
+  data = subtrain,
+  method = "svmRadial",               
+  preProcess = c("center", "scale"),  
+  metric = "ROC", #explicitly set area under ROC curve as criteria
+  trControl = ctrl,
+  tuneLength = 10
+)
+```
+
+
+```{r SVM AUC Confusionmatrix}
+confusionMatrix(churn_svm_auc)
+# interpret
+```
+On SVM with probability classes
+- Accuracy: 0.9328
+This Accuracy is 0.0057 less than the Accuracy obtained without class probabilities.
+(0.9385 - 0.9328 = 0.0057)
+
+```{r SVM AUC besttune + results}
+churn_svm_auc$bestTune
+churn_svm_auc$results
+```
+from results from radial kernel SVM taking class probabilities into account, smaller values of cost is beneficial for the accuracy on this dataset case.
+- the cost = 0.25 yields: 
+- the highest ROC measure 0.9574
+- a sigma value of 0.01541844
+- sensitivity (true positive rate): 0.7372727
+- specificity (true negative rate): 0.9679944
+
+This model does a better job predicting 0's compared to 1's due to the sensitivity and specificity rates.
+
+###SVM HOM - Feature Importance
+
+Creating a prediction wrapper function where the reference class of interest is chosen.
+Evaluating whether it is preferable to focus on the employees having 
+- low scores on HighratingOverallBinary = 0
+- high scores on HighratingOverallBinary= 1
+From a business perspective, the employees being unsatisfied is the ones we want to focus on at first: Choose 0 as reference
+```{r Feature Importance - reference class}
+prob_0 <- function(object, newdata) {
+  predict(object, newdata = newdata, type = "prob")[, "0"]
+}
+```
+
+Variance Importance Plot 
+```{r VIP plot}
+#install.packages("DALEX")
+library(DALEX)
+library(iml)
+library(vip)
+set.seed(123)
+vip(churn_svm_auc,
+    method = "permute", 
+    nsim = 5, 
+    train = subtrain, 
+    target = "HighratingOverallBinary",
+    metric = yardstick::roc_auc,
+    metric_options = list(smaller_is_better = F),
+    #metric = "auc", 
+    reference_class = "0", 
+    pred_wrapper = prob_0)
+```
+
+```{r}
+importance <- varImp(churn_svm_auc)  # 'scale = TRUE' scales the importance scores
+
+# Print the importance
+print(importance)
+# Plotting variable importance
+plot(importance)
+```
+
+### SVM HOM - PDP 
+
+use the pdp package to construct PDPs for the top four features according to the permutation-based (ombytning af elementer i en given mængde/kombinationsmulighed/omplacering) variable importance scores (notice we set prob = TRUE in the call to pdp::partial() so that the feature effect plots are on the probability scale; see ?pdp::partial for details). 
+Additionally, since the predicted probabilities from our model come in two columns (No and Yes), we specify which.class = 2 so that our interpretation is in reference to predicting Yes:
+```{r}
+#install.packages("pdp")
+library(pdp)
+#construct PDP (feature effect plots are on the probability scale)
+features <- c("ratingRecommendToFriend", "ratingWorkLifeBalance", 
+              "ratingSeniorLeadership", "ratingCultureAndValues")
+pdps <- lapply(features, function(x) {
+  partial(churn_svm_auc, 
+          pred.var = x, 
+          which.class = 2, # since the predicted probabilities from our model come in two columns (No=1 and Yes=2), we specify which.class = 1 so that our interpretation is in reference to predicting No
+          prob = TRUE, 
+          plot = TRUE, 
+          plot.engine = "ggplot2") +
+    coord_flip()
+})
+grid.arrange(grobs = pdps,  ncol = 2)
+# interpret
+```
+
+
+
+#SVM Lau
+
+```{r SVM LauB}
+# SVMs
+ctrl_svm <- trainControl(
+  method = "cv", 
+  number = 10, 
+  classProbs = TRUE,             
+  summaryFunction = twoClassSummary  # also needed for AUC/ROC
+)
+
+# Tune an SVM
+set.seed(123)  
+svm_model <- train(
+  X0 ~ ., 
+  data = baked_train,
+  method = "svmRadial",               
+  metric = "ROC",  # explicitly set area under ROC curve as criteria        
+  trControl = ctrl_svm,
+  tuneLength = 10
+)
+
+confusionMatrix(svm_model)
+
+#             Reference
+# Prediction   no  yes
+#        no  65.6 19.8
+#        yes  4.5 10.2
+# Accuracy (average) : 0.7576
+
+# Feature importance 
+# Create a wrapper to retain the predicted class probabilities for the class of interest (in this case, Yes)
+prob_yes <- function(object, newdata) {
+  predict(object, newdata = newdata, type = "prob")[, "yes"]
+}
+#variable importance plot
+set.seed(123)  # for reproducibility
+vip(svm_model, method = "permute", nsim = 5, train = baked_train, 
+    target = "X0", metric = "auc", reference_class = "yes", 
+    pred_wrapper = prob_yes)
+
+# We find that the variables that has the most predictive ability on whether a client has subscribed a term deposit are:
+# X20 (Number of employees)
+# X13 (days since last contact to client)
+# X15 (Previous outcome of campaign = success)
+# X17 (Consumer Confidence Index)
+
+#construct PDP (feature effect plots are on the probability scale)
+features <- c("X20", "X13", 
+              "X15_success", "X18")
+pdps <- lapply(features, function(x) {
+  partial(svm_model, pred.var = x, which.class = 2,        # since the predicted probabilities from our model come in two columns (No and Yes), we specify which.class = 2 so that our interpretation is in reference to predicting Yes
+          prob = TRUE, plot = TRUE, plot.engine = "ggplot2") +
+    coord_flip()
+})
+grid.arrange(grobs = pdps,  ncol = 2)
+# interpretskrald
+```
+
+
+
 
 
 
