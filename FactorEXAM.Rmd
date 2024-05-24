@@ -138,12 +138,17 @@ ggplot(empFactor, aes(x = ratingOverall)) +
 Discuss wether ratingOverall yields the best insights being numeric or being a factor?
 Do we want to obtain RMSE measures or Accuracy measures? 
 
-Discretizing ratingOverall into 2 new variables
+Discretizing ratingOverall into new variable
 ```{r low and highratingOverall}
 empFactor$HighratingOverall_binary <- factor(ifelse(empFactor$ratingOverall < 3, "0", "1"))
 
 head(empFactor$HighratingOverall_binary)
+
+#Deleting on er the other DV
+#empFactor$ratingOverall <- NULL 
+#empFactor$HighratingOverall_binary <- NULL 
 ```
+No need for deleting on or the other yet: creating a new df below!
 REMEMBER to use ONLY ONE FORMAT of the ratingOverall variable
 
 ```{r if asked for numeric ratingOverall}
@@ -201,14 +206,13 @@ From Exploratory Data Analysis is seen in the dataset, that 310 respondents is s
 - ratingWorkLifeBalance
 to zero. This is assessed being a flawed respondent, as it is assumed that this respondent does not take a stand on the above listed question-categories but still rates the ratingOverall with high scores.
 ```{r deleting instances having 0s in several categorical 0-5 and ratingOverall 3-5}
-# Since there's still some giving 0's another subset of data will be made, deleting all the rows where 
-# the respondant answered 0
-empFactor <- empFactor[!(empFactor$ratingCareerOpportunities == 0 |
-                         empFactor$ratingCompensationAndBenefits == 0 |
-                         empFactor$ratingCultureAndValues == 0 |
-                         empFactor$ratingDiversityAndInclusion == 0 |
-                         empFactor$ratingSeniorLeadership == 0 |
-                         empFactor$ratingWorkLifeBalance == 0), ]
+# Since there's still some giving 0's another subset of data will be made, deleting all the rows where the respondant answered 0
+#empFactor <- empFactor[!(empFactor$ratingCareerOpportunities == 0 |
+#                         empFactor$ratingCompensationAndBenefits == 0 |
+#                         empFactor$ratingCultureAndValues == 0 |
+#                         empFactor$ratingDiversityAndInclusion == 0 |
+#                         empFactor$ratingSeniorLeadership == 0 |
+#                         empFactor$ratingWorkLifeBalance == 0), ]
 plot_histogram(empFactor)
 ```
 
@@ -227,12 +231,12 @@ empFactor$ratingBusinessOutlook <- factor(empFactor$ratingBusinessOutlook)
 empFactor$ratingRecommendToFriend <- factor(empFactor$ratingRecommendToFriend)
 empFactor$employmentStatus <- factor(empFactor$employmentStatus)
 
-empFactor$ratingWorkLifeBalance <- factor(empFactor$ratingWorkLifeBalance, levels = c(1, 2, 3, 4, 5), ordered = TRUE)
-empFactor$ratingCultureAndValues <- factor(empFactor$ratingCultureAndValues, levels = c(1, 2, 3, 4, 5), ordered = TRUE)
-empFactor$ratingDiversityAndInclusion <- factor(empFactor$ratingDiversityAndInclusion, levels = c(1, 2, 3, 4, 5), ordered = TRUE)
-empFactor$ratingSeniorLeadership <- factor(empFactor$ratingSeniorLeadership, levels = c(1, 2, 3, 4, 5), ordered = TRUE)
-empFactor$ratingCareerOpportunities <- factor(empFactor$ratingCareerOpportunities, levels = c(1, 2, 3, 4, 5), ordered = TRUE)
-empFactor$ratingCompensationAndBenefits <- factor(empFactor$ratingCompensationAndBenefits, levels = c(1, 2, 3, 4, 5), ordered = TRUE)
+empFactor$ratingWorkLifeBalance <- factor(empFactor$ratingWorkLifeBalance, levels = c(0, 1, 2, 3, 4, 5), ordered = TRUE)
+empFactor$ratingCultureAndValues <- factor(empFactor$ratingCultureAndValues, levels = c(0, 1, 2, 3, 4, 5), ordered = TRUE)
+empFactor$ratingDiversityAndInclusion <- factor(empFactor$ratingDiversityAndInclusion, levels = c(0, 1, 2, 3, 4, 5), ordered = TRUE)
+empFactor$ratingSeniorLeadership <- factor(empFactor$ratingSeniorLeadership, levels = c(0, 1, 2, 3, 4, 5), ordered = TRUE)
+empFactor$ratingCareerOpportunities <- factor(empFactor$ratingCareerOpportunities, levels = c(0, 1, 2, 3, 4, 5), ordered = TRUE)
+empFactor$ratingCompensationAndBenefits <- factor(empFactor$ratingCompensationAndBenefits, levels = c(0, 1, 2, 3, 4, 5), ordered = TRUE)
 
 #empFactor$lengthOfEmployment <- scale(empFactor$lengthOfEmployment)
 
@@ -240,12 +244,17 @@ dim(empFactor)
 glimpse(empFactor)
 ```
 
-```{r}
+```{r Creating Binary df}
 empFactorBinary <- empFactor
 empFactorBinary$ratingOverall <- NULL
 
 dim(empFactorBinary)
 glimpse(empFactorBinary)
+```
+
+```{r}
+sum(is.na(empFactor))
+sum(is.na(empFactorBinary))
 ```
 
 
@@ -276,13 +285,19 @@ recipe <- recipe(ratingOverall ~ ., data = empFactor) %>%
 recipe
 
 #Preparing the blueprint based on training data
-prepare <- prep(recipe, training = subtrain)
+prepare <- prep(recipe, training = train)
 prepare
 
 #baking: applying the recipe to new data / test data
 baked_train <- bake(prepare, new_data = train)
 baked_test <- bake(prepare, new_data = test)
 ```
+
+```{r dim standard recipe}
+dim(baked_train)
+dim(baked_test)
+```
+
 
 If computation is heavy
 ```{r downsizing datasplit }
@@ -331,14 +346,14 @@ dim(subbaked_test)
 
 ## 8.3.1 Fitting Classification Trees (ISLRp.353)'
 
-In this case the whole dataset is used.
+In this case the whole dataset empFactor is used.
 
 ```{r Fit tree}
 #install.packages("ISLR2")
 library(tree)
 library(ISLR2)
 #using carseats as pseudocode
-tree.carseats <- tree(HighratingOverall_binary ~ ., empFactorBinary)
+tree.carseats <- tree(HighratingOverall_binary ~ ., empFactorBinary) #consider change this into subtrain + subtest
 summary(tree.carseats)
 ```
 Variables actually used in tree construction:
@@ -367,7 +382,7 @@ Rating Recommend To Friend: NEGATIVE
 - the root node of the tree, where the first decision is made. It indicates that the initial split in the dataset was made based on the predictor "ratingRecommendToFriend," specifically when the rating is NEGATIVE. 
 - this decision or split was deemed most informative in predicting the target variable at this stage.
 
-Deeper in the tree other variables are presented with decisions
+Deeper in the tree, other variables are presented with decisions
 
 ```{r Tree metrics and measures}
 tree.carseats
@@ -432,18 +447,277 @@ Choosing the Optimal Tree Size (deviance///size):
 Complexity Parameter (k): 
 - the plot of k vs. deviance helps in understanding how sensitive the tree is to the pruning process. A sharp increase in deviance as k increases indicates a point beyond which the tree loses significant predictive accuracy
 
-```{r}
+```{r Prune Tree plot}
 prune.carseats <- prune.misclass(tree.carseats , best = 3)
 plot(prune.carseats)
 text(prune.carseats , pretty = 0)
 ```
 
-```{r}
+```{r PruneTree test predictions}
 tree.pred <- predict(prune.carseats , empFactorBinary.test,type = "class")
 table(tree.pred, High.test)
 ((840+5844)/(840+5844+264+367))
 ```
 correct predictions for 91,37% of the locations in the test data set WITH PRUNING the decision tree. The test accuracy gains 0.0097 percentagepoints by using pruning having 3 terminal nodes instead of 6. (0.9137-0.9040 = 0.0097)
+
+
+
+## 8.4.9 EXE 9 - fit Classification Trees
+EXE 9 - Classification tree - 1070 purchases where the customer either purchased Citrus Hill or Minute Maid Orange Juice. 
+This problem involves the OJ data set which is part of the ISLR2 package.
+- (a) Create a training set containing a random sample of 800 observations, and a test set containing the remaining observations.
+- (b) Fit a tree to the training data, with Purchase as the response and the other variables as predictors. Use the summary() function to produce summary statistics about the tree, and describe the results obtained. What is the training error rate? How many terminal nodes does the tree have?
+- (c) Type in the name of the tree object in order to get a detailed text output. Pick one of the terminal nodes, and interpret the information displayed.
+- (d) Create a plot of the tree, and interpret the results.
+- (e) Predict the response on the test data, and produce a confusion matrix comparing the test labels to the predicted test labels. What is the test error rate?
+- (f) Apply the cv.tree() function to the training set in order to determine the optimal tree size.
+- (g) Produce a plot with tree size on the x-axis and cross-validated classification error rate on the y-axis.
+- (h) Which tree size corresponds to the lowest cross-validated classification error rate?
+- (i) Produce a pruned tree corresponding to the optimal tree size obtained using cross-validation. If cross-validation does not lead to selection of a pruned tree, then create a pruned tree with five terminal nodes.
+- (j) Compare the training error rates between the pruned and unpruned trees. Which is higher?
+- (k) Compare the test error rates between the pruned and unpruned trees. Which is higher?
+
+
+- (a) Create a training set containing a random sample of 800 observations, and a test set containing the remaining observations.
+
+DOING THIS WITH SUBTRAIN SUBTEST
+
+```{r datasplit train test}
+dim(subtrain)
+dim(subtest)
+```
+
+- (b) Fit a tree to the training data, with Purchase as the response and the other variables as predictors. 
+Use the summary() function to produce summary statistics about the tree, and describe the results obtained. 
+What is the training error rate? How many terminal nodes does the tree have?
+
+```{r}
+library(tree)
+oj.tree = tree(HighratingOverall_binary ~ ., subtrain)
+summary(oj.tree)
+# Notice in the output: The tree only uses two variables: LoyalCH and PriceDiff.
+# It has 7 terminal nodes. Training error rate (misclassification error) for the tree is 0.155
+```
+Classification tree:
+Variables actually used in tree construction:
+[1] "ratingRecommendToFriend"      
+[2] "ratingWorkLifeBalance"        
+[3] "ratingCareerOpportunities"    
+[4] "ratingCompensationAndBenefits"
+[5] "ratingCultureAndValues"
+
+Number of terminal nodes:  7
+- Terminal nodes, or leaf nodes, are the end points of the tree where predictions are made. 
+- The number of terminal nodes can give you an idea of the complexity of the model: more nodes generally mean a more complex model.
+
+Residual mean deviance:  0.3143 = 209 / 665
+- a small deviance indicates a tree that provides a good fit to the
+(training) data. 
+- the residual mean deviance reported is simply the deviance divided by n − |T0|
+
+Misclassification error rate: 0.07143 = 48 / 672 
+- training error rate is 0.07143, which means that approximately 7.143% of the predictions made by the tree were incorrect. 
+- this is calculated as 48 misclassified observations out of a total of 672 observations used in the model.
+
+
+- (c) Type in the name of the tree object in order to get a detailed text output. Pick one of the terminal nodes, and interpret the information displayed.
+```{r Tree metrics and measures}
+oj.tree
+# Let's pick terminal node labeled “10)”
+   # - The splitting variable at this node is PriceDiff
+   # - The splitting value of this node is 0.065. 
+   # - There are 79 points in the subtree below this node. 
+   # -The deviance for all points contained in region below this node is 76.79. 
+   # - A star (*) in the line denotes that this is in fact a terminal node. 
+   # - The prediction at this node is Sales=MM. About 19% points in this node have CH as value of Sales.
+   #   Remaining 81% points have MM as value of Sales. 
+```
+1) root 672 575.70 1 ( 0.15327 0.84673 )  
+672: all observations in df
+575.70: deviance
+1: the majority class (which is Highoverallrating)
+( 0.15327 0.84673 ): probability of Highoverallrating
+
+2) ratingRecommendToFriend:NEGATIVE 198 274.50 1 (0.49495 0.50505 )
+2): first split
+ratingRecommendToFriend: NEGATIVE: the tree first splits the data based on whether this rating is NEGATIVE
+198: observation quantity, has fewer compared to the root because it only includes cases where the condition is true.
+274.50: deviance here is smaller compared to the root, indicating a better fit for these observations under this condition.
+
+4) ratingWorkLifeBalance: 1,2 134 171.00 0 ( 0.66418 0.33582 )
+- subsequent nodes are based on other ratings like "ratingSeniorLeadership" and "ratingCareerOpportunities," with specific levels indicated (e.g., "1" or "2,3,4,5").
+
+We extract this above table to gain accurate information about the decision tree nodes
+
+
+- (d) Create a plot of the tree, and interpret the results.
+
+use the plot() function to display the tree structure, and the text() function to display the node labels. The argument pretty = 0 instructs R to include the category names for any qualitative predictors, rather than simply displaying a letter for each category
+```{r Tree Plot}
+plot(oj.tree)
+text(oj.tree, pretty = 0)
+```
+Rating Recommend To Friend: NEGATIVE
+- the root node of the tree, where the first decision is made. It indicates that the initial split in the dataset was made based on the predictor "ratingRecommendToFriend," specifically when the rating is NEGATIVE. 
+- this decision or split was deemed most informative in predicting the target variable at this stage.
+
+Deeper in the tree, other variables are presented with decisions
+
+
+- (e) Predict the response on the test data, and produce a confusion matrix comparing the test labels to the predicted test labels. What is the test error rate?
+
+Evaluating performance of a classification tree on these data, the test error is estimated. Splitting the observations into a training set and a test set, building the tree using the training set, and evaluate its performance on the test data. 
+The predict() function can be used for this purpose. In the case
+of a classification tree, the argument type = "class" instructs R to return the actual class prediction. 
+```{r}
+oj.pred = predict(oj.tree, subtest, type = "class")
+table(subtest$HighratingOverall_binary, oj.pred)
+
+testerror = (21+252)/(21+252+25+3)
+testerror
+```
+correct predictions for 90,7% of the locations in the test data set
+
+###8.4.9 Prune + CV
+- (f) Apply the cv.tree() function to the training set in order to determine the optimal tree size.
+
+Next, we consider whether pruning the tree might lead to improved results. The function cv.tree() performs cross-validation in order to determine the optimal level of tree complexity; cost complexity pruning is used in order to select a sequence of trees for consideration. We use the argument FUN = prune.misclass in order to indicate that we want the classification error rate to guide the cross-validation and pruning process, rather than the default for the cv.tree() function, which is deviance. The cv.tree() function reports the number of terminal nodes of each tree considered (size) as well as the corresponding error rate and the value of the cost-complexity parameter used (k, which corresponds to α)
+
+```{r Prune output}
+cv.oj = cv.tree(oj.tree, FUN = prune.tree)
+cv.oj
+```
+The output is assessed by comparing the node "size" to the deviance of these exact nodes
+- in this case nodes 6 has the lowest deviance 278.6684 
+- Proceeding to gain test error measures
+
+
+- (g) Produce a plot with tree size on the x-axis and cross-validated classification error rate on the y-axis.
+
+```{r Prune plot: node size + k complexity parameter}
+par(mfrow = c(1, 2))
+plot(cv.oj$size, cv.oj$dev, type = "b", xlab = "Tree Size", ylab = "Deviance")
+plot(cv.oj$k, cv.oj$dev, type = "b", xlab = "Complex Parameter k", ylab = "Deviance")
+```
+Choosing the Optimal Tree Size (deviance///size): 
+- these plots are used to select the optimal tree size (number of terminal nodes). You typically look for the tree size corresponding to the lowest point on the deviance plot or the smallest tree size
+
+Complexity Parameter (k): 
+- the plot of k vs. deviance helps in understanding how sensitive the tree is to the pruning process. A sharp increase in deviance as k increases indicates a point beyond which the tree loses significant predictive accuracy
+
+Based on both plots and size///deviance comparisons:
+- 6 nodes are chosen as the optimal Tree complexity
+
+- (h) Which tree size corresponds to the lowest cross-validated classification error rate?
+
+```{r choose quantity of Tree nodes}
+#Based on both plots and size///deviance comparisons:
+#- 6 nodes are chosen as the optimal Tree complexity
+```
+
+- (i) Produce a pruned tree corresponding to the optimal tree size obtained using cross-validation. If cross-validation does not lead to selection of a pruned tree, then create a pruned tree with five terminal nodes.
+
+```{r PRune Tree plot}
+oj.pruned = prune.tree(oj.tree, best = 6)
+plot(oj.pruned)
+text(oj.pruned, pretty = 0)
+```
+
+
+- (j) Compare the training error rates between the pruned and unpruned trees. Which is higher?
+
+```{r PruneTree test predictions }
+summary(oj.pruned)
+```
+The pruned training error 0.328 is 0.0137 worse than the unpruned training error 0.3143 (0.328-0.3143 = 0.0137)
+
+- (k) Compare the test error rates between the pruned and unpruned trees. Which is higher?
+```{r Unprune Tree accuracy}
+pred.unpruned = predict(oj.tree, subtest, type = "class")
+table(subtest$HighratingOverall_binary, pred.unpruned)
+testMSEu= (21+252)/(21+252+25+3)
+testMSEu
+```
+
+```{r Prune Tree accuracy}
+pred.pruned = predict(oj.pruned, subtest, type = "class")
+table(subtest$HighratingOverall_binary, pred.pruned)
+testMSEp= (21+252)/(21+252+25+3)
+testMSEp
+```
+
+
+
+## 8.4.11 EXE 11 - Boosting DV binary
+EXE 11 - focus on Boosting - Binary classification problem - 5822 real customer records, (Purchase) indicates whether the customer purchased a caravan insurance policy or not.
+- This question uses the Caravan data set.
+- (a) Create a training set consisting of the first 1,000 observations, and a test set consisting of the remaining observations.
+- (b) Fit a boosting model to the training set with Purchase as the response and the other variables as predictors. Use 1,000 trees, and a shrinkage value of 0.01. Which predictors appear to be the most important?
+- (c) Use the boosting model to predict the response on the test data.
+Predict that a person will make a purchase if the estimated probability of purchase is greater than 20 %. Form a confusion matrix. 
+What fraction of the people predicted to make a purchase do in fact make one? How does this compare with the results obtained from applying KNN or logistic regression to this data set?
+
+- (a) Create a training set consisting of the first 1,000 observations, and a test set consisting of the remaining observations.
+```{r train for boosting}
+dim(subtrain)
+dim(subtest)
+```
+
+- (b) Fit a boosting model to the training set with Purchase as the response and the other variables as predictors. Use 1,000 trees, and a shrinkage value of 0.01. 
+Which predictors appear to be the most important?
+
+I get the following error:
+
+"Error in plot.window(xlim, ylim, log = log, ...) : 
+  need finite 'xlim' values"
+  
+When trying to run Boosting...
+
+```{r ERROR Fit Boosting model 1000 trees + skrinkage 0.01}
+library(gbm)
+set.seed(123)
+boost.caravan = gbm(HighratingOverall_binary ~ ., subtrain, n.trees = 500, shrinkage = 0.01, distribution = "bernoulli")
+summary(boost.caravan)
+
+# Concl: PPERSAUT, MKOOP KLA and MOPLHOOG 
+# (that is,Contribution car policies, Purchasing power class, High level education) 
+# are three most important variables
+
+summary(Caravan.train$PPERSAUT)
+summary(Caravan.train$MKOOPKLA)
+summary(Caravan.train$MOPLHOOG)
+
+plot(boost.caravan, i="PPERSAUT")
+plot(boost.caravan, i="MKOOPKLA")
+plot(boost.caravan, i="MOPLHOOG")
+```
+
+
+- (c) Use the boosting model to predict the response on test data.
+Predict that a person will make a purchase if the estimated probability of purchase is greater than 20 %. Form a confusion matrix. 
+What fraction of the people predicted to make a purchase do in fact make one? How does this compare with the results obtained from applying KNN or logistic regression to this data set?
+
+```{r ERROR boost predicting on test}
+boost.prob = predict(boost.caravan, Caravan.test, n.trees = 1000, type = "response") # note we use type="response" to retain probabilities ; also, we need to mention again "n.trees = 1000". 
+boost.pred = ifelse(boost.prob > 0.2, 1, 0)
+table(Caravan.test$Purchase, boost.pred)
+
+ 34/(137 + 34) 
+## Precision (TP/P*) is 0.1988. Thus, about 20% of people predicted to make purchase actually end up making one.
+
+# Logistic regression 
+lm.caravan = glm(Purchase ~ ., data = Caravan.train, family = binomial)
+lm.prob = predict(lm.caravan, Caravan.test, type = "response")
+lm.pred = ifelse(lm.prob > 0.2, 1, 0)
+table(Caravan.test$Purchase, lm.pred)
+
+58/(350 + 58)
+## [1] 0.1422. 
+## About 14 % of people predicted to make purchase using logistic  regression actually end up making one. 
+# The precision is lower than for boosting.
+
+# Note: In applications one can use other popular performance measures (AUC,recall, ...) as discussed in the first part of the curriculum (ISL p. 147-149). 
+```
 
 
 

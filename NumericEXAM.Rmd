@@ -26,6 +26,9 @@ library(recipes)  # for feature engineering tasks
 
 ```{r data structure - overview}
 library(dplyr)
+# Convert all character columns in the data frame 'emp' to factors
+empNumeric <- empNumeric %>%
+  mutate(across(where(is.character), factor))
 glimpse(empNumeric)
 ```
 character string (<chr>): these should be transformed into categorical variables
@@ -80,6 +83,10 @@ empNumeric$reviewYear <- year(empNumeric$reviewDateTime)
 ```
 reviewYear is created being a numeric with range 2013->2024.
 
+```{r delete origin variable}
+empNumeric$reviewDateTime <- NULL 
+```
+
 ```{r EDA reviewYear}
 library(tidyverse)
 library(DataExplorer)
@@ -104,12 +111,13 @@ reviewYear
 This is the variable to predict based on the other features
 
 ```{r Factorize/ordering ratingOverall}
-empNumeric$ratingOverall <- factor(empNumeric$ratingOverall)
+#empNumeric$ratingOverall <- factor(empNumeric$ratingOverall)
 summary(empNumeric$ratingOverall)
 # Convert to an ordinal factor
-empNumeric$ratingOverall <- factor(empNumeric$ratingOverall, levels = c(1, 2, 3, 4, 5), ordered = TRUE)
+#empNumeric$ratingOverall <- factor(empNumeric$ratingOverall, levels = c(1, 2, 3, 4, 5), ordered = TRUE)
 ```
-Making the variable ordinal scaled: ordered = TRUE
+The average perception of the company is a rating of 3.76 from all employees
+
 
 ```{r Histogram ratingOverall }
 histogram(empNumeric$ratingOverall)
@@ -127,7 +135,6 @@ ggplot(empNumeric, aes(x = ratingOverall)) +
 Discuss wether ratingOverall yields the best insights being numeric or being a factor?
 Do we want to obtain RMSE measures or Accuracy measures? 
 
-COMMON ANSWER: make into ordinal scale
 
 #DEALING WITH MISSING
 
@@ -191,22 +198,308 @@ plot_histogram(empNumeric)
 ```
 
 ratingCeo, ratingBusinessOutlook, ratingRecommendToFriend, employmentStatus
-- factorizing these variables into categorical variables.
+- transforming these variables into numeric variables.
 
-lengthOfEmployment
-- scaling lenght of employment
-```{r Factorize categorical variables + scaling}
-empNumeric$ratingCeo <- factor(empNumeric$ratingCeo)
-empNumeric$ratingBusinessOutlook <- factor(empNumeric$ratingBusinessOutlook)
-empNumeric$ratingRecommendToFriend <- factor(empNumeric$ratingRecommendToFriend)
-empNumeric$employmentStatus <- factor(empNumeric$employmentStatus)
+Assumptions made in this step:
+- ratingCeo converted "APPROVE" to 2, "NO_OPINION" to 1, and "DISAPPROVE" to 0. Here is made a ranking scale of the three categories.
 
-empNumeric$lengthOfEmployment <- scale(empNumeric$lengthOfEmployment)
+- ratingBusinessOutlook converted "POSITIVE" to 2, "NEUTRAL" to 1, and "NEGATIVE" to 0. Here is made a ranking scale of the three categories.
+
+- ratingRecommendToFriend converted "POSITIVE" to 1 and "NEGATIVE" to 0. Here is made a ranking scale of the two categories.
+
+- employmentStatus converted "REGULAR" to 1 and "PART_TIME" to 0. Here is made a ranking scale of the two categories.
+
+
+```{r numeric transformation variables }
+#TRANSFORMING INTO NUMERIC SCALE
+
+###ratingCeo
+# Convert "APPROVE" to 2, "NO_OPINION" to 1, and "DISAPPROVE" to 0
+empNumeric$ratingCeo <- factor(empNumeric$ratingCeo, levels = c("DISAPPROVE", "NO_OPINION", "APPROVE"), labels = c(0, 1, 2))
+
+# Convert the factor with numeric labels to numeric type
+empNumeric$ratingCeo <- as.numeric(as.character(empNumeric$ratingCeo))
+
+###ratingBusinessOutlook
+# Convert "POSITIVE" to 2, "NEUTRAL" to 1, and "NEGATIVE" to 0
+empNumeric$ratingBusinessOutlook <- factor(empNumeric$ratingBusinessOutlook, levels = c("NEGATIVE", "NEUTRAL", "POSITIVE"), labels = c(0, 1, 2))
+
+# Convert the factor with numeric labels to numeric type
+empNumeric$ratingBusinessOutlook <- as.numeric(as.character(empNumeric$ratingBusinessOutlook))
+
+###ratingRecommendToFriend
+# Convert "POSITIVE" to 1 and "NEGATIVE" to 0
+empNumeric$ratingRecommendToFriend <- ifelse(empNumeric$ratingRecommendToFriend == "POSITIVE", 1, 0)
+
+empNumeric$ratingRecommendToFriend <- as.numeric(empNumeric$ratingRecommendToFriend)
+
+###employmentStatus
+empNumeric$employmentStatus <- ifelse(empNumeric$employmentStatus == "REGULAR", 1, 0)
+
+empNumeric$employmentStatus <- as.numeric(empNumeric$employmentStatus)
 
 glimpse(empNumeric)
 ```
 
-# MODEL DEVELOPMENT
+# Data Preparation
+
+```{r datasplit standard}
+library(rsample)
+set.seed(123) # Set a random seed for replication purposes
+numericsplit <- initial_split(empNumeric, prop = 0.70, strata = "ratingOverall")
+numerictrain  <- training(numericsplit)
+numerictest   <- testing(numericsplit)
+dim(numerictrain)
+dim(numerictest)
+```
+
+```{r Recipe standard }
+#Creating the blueprint
+numericrecipe <- recipe(ratingOverall ~ ., data = empNumeric) %>%
+  step_normalize(all_numeric(), -all_outcomes()) %>%
+  #step_impute_knn(all_predictors(), neighbors = 5) %>%
+  #step_BoxCox(all_outcomes()) %>%
+  #step_YeoJohnson(all_numeric(), -all_outcomes()) %>%
+  # step_other(all_nominal(), threshold = 0.05, other = "Other") %>%  #lumping if needed
+  step_center(all_numeric(), -all_outcomes()) %>%
+  step_scale(all_numeric(), -all_outcomes()) %>%
+  step_dummy(all_nominal(), -all_outcomes(), one_hot = FALSE) %>% #produces dummy encoding (True is one-hot encoding)
+  step_nzv(all_predictors()) # using NZV last removes X factor levels with near zero variance
+numericrecipe
+
+#Preparing the blueprint based on training data
+numericprepare <- prep(numericrecipe, training = numerictrain)
+numericprepare
+
+#baking: applying the recipe to new data / test data
+numericbaked_train <- bake(numericprepare, new_data = numerictrain)
+numericbaked_test <- bake(numericprepare, new_data = numerictest)
+```
+
+```{r dim standard numericrecipe}
+dim(numericbaked_train)
+dim(numericbaked_test)
+```
+
+If computation is heavy
+```{r downsizing datasplit }
+set.seed(123)
+random_indices <- sample(1:nrow(empNumeric), 1000)
+sub_empNumeric<- empNumeric[random_indices, ]
+
+subsplitnumeric  <- initial_split(sub_empNumeric, prop = 0.7, strata = "ratingOverall")
+subtrainnumeric <- training(subsplitnumeric)
+subtestnumeric  <- testing(subsplitnumeric)
+```
+
+```{r Recipe subset }
+#Creating the blueprint
+subrecipenumeric <- recipe(ratingOverall ~ ., data = sub_empNumeric) %>%
+  step_normalize(all_numeric(), -all_outcomes()) %>%
+  #step_impute_knn(all_predictors(), neighbors = 5) %>%
+  #step_BoxCox(all_outcomes()) %>%
+  #step_YeoJohnson(all_numeric(), -all_outcomes()) %>%
+  # step_other(all_nominal(), threshold = 0.05, other = "Other") %>%  #lumping if needed
+  step_center(all_numeric(), -all_outcomes()) %>%
+  step_scale(all_numeric(), -all_outcomes()) %>%
+  step_dummy(all_nominal(), -all_outcomes(), one_hot = FALSE) %>% #produces dummy encoding (True is one-hot encoding)
+  step_nzv(all_predictors()) # using NZV last removes X factor levels with near zero variance
+subrecipenumeric
+
+#Preparing the blueprint based on training data
+subpreparenumeric <- prep(subrecipenumeric, training = subtrainnumeric)
+subpreparenumeric
+
+#baking: applying the recipe to new data / test data
+subbaked_trainnumeric <- bake(subpreparenumeric, new_data = subtrainnumeric)
+subbaked_testnumeric <- bake(subpreparenumeric, new_data = subtestnumeric)
+```
+
+
+```{r dimensions baked train/test}
+#New datasets
+dim(subbaked_trainnumeric)
+dim(subbaked_testnumeric)
+```
+
+##8.4.8 EXE 8 Regression tree and bagging
+
+Regression tree and bagging - REGRESSION PROBLEM
+- In the lab, a classification tree was applied to the Carseats data set after converting Sales into a qualitative response variable. Now we will seek to predict Sales using regression trees and related approaches, treating the response as a quantitative variable.
+- (a) Split the data set into a training set and a test set.
+- (b) Fit a regression tree to the training set. Plot the tree, and interpret the results. What test MSE do you obtain?
+- (c) Use cross-validation in order to determine the optimal level of tree complexity. Does pruning the tree improve the test MSE?
+- (d) Use the bagging approach in order to analyze this data. What test MSE do you obtain? Use the importance() function to determine which variables are most important.
+- (e) Use random forests to analyze this data. What test MSE do you obtain? Use the importance() function to determine which variables are most important. Describe the effect of m, the number of variables considered at each split, on the error rate obtained.
+- (f) Now analyze the data using BART, and report your results.
+
+- (a) Split the data set into a training set and a test set.
+```{r datasplit subbaked_trainnumeric + test}
+dim(numerictrain)
+dim(numerictest)
+```
+
+- (b) Fit a regression tree to the training set. Plot the tree, and interpret the results. What test MSE do you obtain?
+```{r Fit tree}
+library(tree)
+tree.carseats = tree(ratingOverall ~ ., numerictrain)
+summary(tree.carseats)
+# Notice in the summary output that variables actually used in tree construction
+# Note also that this (unpruned) tree has 19 terminal nodes
+```
+Regression tree:
+Variables actually used in tree construction:
+[1] "ratingCultureAndValues"    "ratingCareerOpportunities"
+[3] "ratingSeniorLeadership"    "ratingBusinessOutlook"
+
+Number of terminal nodes:  7
+- Terminal nodes, or leaf nodes, are the end points of the tree where predictions are made. 
+- The number of terminal nodes can give you an idea of the complexity of the model: more nodes generally mean a more complex model.
+
+Residual mean deviance:  0.5732 = 3250 / 5671
+- deviance is simply the sum of squared errors for the tree
+-  calculated as the total deviance divided by the degrees of freedom (number of observations minus the number of terminal nodes).
+- Lower deviance values generally suggest a better fit of the model to the data.
+
+Distribution of residuals:
+  Min.     1st Qu.  Median    Mean 3rd Qu.    Max. 
+-3.7400    -0.4817  0.2109  0.0000  0.2602  3.5180
+- describing the behavior of residuals in the model
+
+use the plot() function to display the tree structure, and the text() function to display the node labels. The argument pretty = 0 instructs R to include the category names for any qualitative predictors, rather than simply displaying a letter for each category
+```{r Tree plot}
+# Now plot it
+plot(tree.carseats)
+text(tree.carseats, pretty = 0)
+```
+- The root of the tree splits the data based on ratingCultureAndValues < 2.5. This suggests that ratingCultureAndValues is a significant predictor in determining the outcome.
+- Deeper in the tree, other variables are presented with decisions
+
+
+```{r Tree metrics and measures}
+tree.carseats
+```
+1) root 5678 8691.0 3.760  
+5678: all observations in df
+8691.0: deviance
+3.760: predicted mean value of the target variable for this node (3.760). This is the average outcome for all observations at the root before any splits are made.
+
+2) ratingCultureAndValues < 2.5 1326 1654.0 2.275  
+2): first split
+ratingCultureAndValues < 2.5: the tree first splits the data based on whether this rating is above/below 2,5
+1326: 
+1654.0: deviance for each node, providing a measure of the tree's error post-split.
+2.275: mean value of the target variable for observations in each node.
+
+We extract this above table to gain accurate information about the decision tree nodes
+
+
+Evaluating performance of a classification tree on these data, the test error is estimated. Splitting the observations into a training set and a test set, building the tree using the training set, and evaluate its performance on the test data. 
+```{r Tree test predictions}
+pred.trees <- predict(tree.carseats, numerictest)
+mean((numerictest$ratingOverall - pred.trees)^2)
+```
+the test MSE is about 0.6013
+
+### 8.4.8 EXE 8 - CV + Pruning
+
+- (c) Use cross-validation in order to determine the optimal level of tree complexity. Does pruning the tree improve the test MSE?
+
+cv.tree() runs a K-fold cross-validation experiment to find the deviance or number of misclassifications as a function of the cost-complexity parameter k (alpha, in the textbook).
+```{r CV choosing level of trees}
+set.seed(123)
+cv.carseats = cv.tree(tree.carseats, FUN = prune.tree) 
+par(mfrow = c(1, 2))
+plot(cv.carseats$size, cv.carseats$dev, type = "b")
+plot(cv.carseats$k, cv.carseats$dev, type = "b")
+
+cv.carseats$dev 
+min(cv.carseats$dev)
+# The minimum cv-error is obtained for the size=7 OBS for reversed dev in this list!!??
+```
+plotting the MSE as a function of the number of leaves $size (number of terminal nodes, labelled, T, see p. 309 in textbook)
+- discussing the number of terminal nodes as a trade-off from deviance/MSE
+
+Complexity Parameter (k): 
+- the plot of k vs. deviance helps in understanding how sensitive the tree is to the pruning process. A sharp increase in deviance as k increases indicates a point beyond which the tree loses significant predictive accuracy
+
+```{r Pruned Tree plot}
+# We can now prune the original tree: 
+  # Best size = 7 - BUT WE CHOOSE 5 as getting something comparable
+pruned.carseats = prune.tree(tree.carseats, best = 5)
+par(mfrow = c(1, 1))
+plot(pruned.carseats)
+text(pruned.carseats, pretty = 0)
+```
+
+Evaluating performance of a classification tree on these data, the test error is estimated. Splitting the observations into a training set and a test set, building the tree using the training set, and evaluate its performance on the test data. 
+```{r Tree test predictions}
+pred.pruned <- predict(pruned.carseats, numerictest)
+mean((numerictest$ratingOverall - pred.pruned)^2)
+```
+the test MSE is 0.6252, which is 0.0239 better than the standard tree. (0.6252-0.6013 = 0.0239) 
+
+### 8.4.8 EXE 8 Bagging
+
+- (d) Use the bagging approach in order to analyze this data. What test MSE do you obtain? Use the importance() function to determine which variables are most important.
+
+```{r}
+library(randomForest)
+set.seed(123)
+bag.carseats = randomForest(ratingOverall ~ ., data = numerictrain, mtry = 10, ntree = 500, importance = T) # notice mtry = p
+
+bag.pred = predict(bag.carseats, Carseats.test)
+mean((Carseats.test$Sales - bag.pred)^2)  # Bagging improves the test MSE to approx 2.5
+
+# The relative importance of the variables: 
+importance(bag.carseats)
+# We see that Price, ShelveLoc, CompPrice, Adv 
+# and Age are the most important variables to predict sales �𝚎
+varImpPlot(bag.carseats)
+```
+HERE IS STATES THAT RF does not work on numeric DV's^^^^
+
+
+- (e) Use random forests to analyze this data. What test MSE do you obtain? 
+Use the importance() function to determine which variables are most important. Describe the effect of m, the number of variables considered at each split, on the error rate obtained.
+```{r}
+library(randomForest)
+set.seed(123)
+rf.carseats = randomForest(ratingOverall ~ ., data = numerictrain, mtry = 5, ntree = 50, importance = T) 
+## notice mtry = < p; 
+## Changing mtry (m) that is, the number of variables considered at each split,varies test MSE.
+
+rf.pred = predict(rf.carseats, Carseats.test)
+mean((Carseats.test$Sales - rf.pred)^2) # Random forest improves even more the MSE on test set to 2.28
+importance(rf.carseats)
+# We see again the most important variables to predict sales
+varImpPlot(rf.carseats)
+```
+HERE IS STATES THAT RF does not work on numeric DV's^^^^
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# from Ralle + Boysen MODEL DEVELOPMENT
 
 ```{r Boysen}
 library(rsample)
