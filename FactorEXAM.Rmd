@@ -317,6 +317,7 @@ as well as DV in
  - subsplit  <- initial_split(subempFactor, prop = 0.7, strata = "HIGHRATINGOVERALLBINARY")
 
 ```{r downsizing datasplit DVBinary }
+library(rsample)
 set.seed(123)
 random_indices <- sample(1:nrow(empFactorBinary), 1000)
 subempFactor <- empFactorBinary[random_indices, ]
@@ -362,7 +363,7 @@ subrecipe <- recipe(HighratingOverall_binary ~ ., data = subempFactor) %>%
   #step_impute_knn(all_predictors(), neighbors = 5) %>%
   #step_BoxCox(all_outcomes()) %>%
   #step_YeoJohnson(all_numeric(), -all_outcomes()) %>%
-  # step_other(all_nominal(),threshold=0.05, other = "Other") %>%
+  # step_other(all_nominal(),threshold=0.05,other = "Other") %>%
   step_center(all_numeric(), -all_outcomes()) %>%
   step_scale(all_numeric(), -all_outcomes()) %>%
   step_dummy(all_nominal(), -all_outcomes(), one_hot = FALSE) %>% #produces dummy encoding (True is one-hot encoding)
@@ -395,7 +396,7 @@ In this case the whole dataset empFactor is used.
 library(tree)
 library(ISLR2)
 #using carseats as pseudocode
-tree.carseats <- tree(HighratingOverall_binary ~ ., empFactorBinary) #consider change this into subtrain + subtest
+tree.carseats <- tree(HighratingOverallBinary ~ ., subtrain) #consider change this into subtrain + subtest
 summary(tree.carseats)
 ```
 Variables actually used in tree construction:
@@ -455,13 +456,13 @@ set.seed(123)
 
 treetrain <- sample(1:nrow(empFactorBinary), 800)
 empFactorBinary.test <- empFactorBinary[-treetrain , ]
-High.test <- empFactorBinary$HighratingOverall_binary[-treetrain]
+High.test <- empFactorBinary$HighratingOverallBinary[-treetrain]
 
-tree.empFactorBinary <- tree(HighratingOverall_binary ~ ., data = empFactorBinary, subset = treetrain)
-tree.pred <- predict(tree.empFactorBinary, newdata = empFactorBinary.test, type = "class")
+tree.empFactorBinary <- tree(HighratingOverallBinary ~ ., data = empFactorBinary, subset = treetrain)
+tree.pred <- predict(tree.empFactorBinary, empFactorBinary.test, type = "class")
 
 table(tree.pred, High.test)
-((948+5663)/(948+5663+445+257))
+#((948+5663)/(948+5663+445+257))
 ```
 correct predictions for 90,4% of the locations in the test data set
 
@@ -535,7 +536,7 @@ What is the training error rate? How many terminal nodes does the tree have?
 
 ```{r}
 library(tree)
-oj.tree = tree(HighratingOverall_binary ~ ., subtrain)
+oj.tree = tree(HighratingOverallBinary ~ ., subtrain)
 summary(oj.tree)
 # Notice in the output: The tree only uses two variables: LoyalCH and PriceDiff.
 # It has 7 terminal nodes. Training error rate (misclassification error) for the tree is 0.155
@@ -613,7 +614,7 @@ The predict() function can be used for this purpose. In the case
 of a classification tree, the argument type = "class" instructs R to return the actual class prediction. 
 ```{r}
 oj.pred = predict(oj.tree, subtest, type = "class")
-table(subtest$HighratingOverall_binary, oj.pred)
+table(subtest$HighratingOverallBinary, oj.pred)
 
 testerror = (21+252)/(21+252+25+3)
 testerror
@@ -660,7 +661,7 @@ Based on both plots and size///deviance comparisons:
 - (i) Produce a pruned tree corresponding to the optimal tree size obtained using cross-validation. If cross-validation does not lead to selection of a pruned tree, then create a pruned tree with five terminal nodes.
 
 ```{r PRune Tree plot}
-oj.pruned = prune.tree(oj.tree, best = 6)
+oj.pruned = prune.tree(oj.tree, best = 4)
 plot(oj.pruned)
 text(oj.pruned, pretty = 0)
 ```
@@ -676,14 +677,14 @@ The pruned training error 0.328 is 0.0137 worse than the unpruned training error
 - (k) Compare the test error rates between the pruned and unpruned trees. Which is higher?
 ```{r Unprune Tree accuracy}
 pred.unpruned = predict(oj.tree, subtest, type = "class")
-table(subtest$HighratingOverall_binary, pred.unpruned)
+table(subtest$HighratingOverallBinary, pred.unpruned)
 testMSEu= (21+252)/(21+252+25+3)
 testMSEu
 ```
 
 ```{r Prune Tree accuracy}
 pred.pruned = predict(oj.pruned, subtest, type = "class")
-table(subtest$HighratingOverall_binary, pred.pruned)
+table(subtest$HighratingOverallBinary, pred.pruned)
 testMSEp= (21+252)/(21+252+25+3)
 testMSEp
 ```
@@ -765,6 +766,9 @@ table(Caravan.test$Purchase, lm.pred)
 
 ##LauB RF Random Forest
 
+```{r Define train CV}
+ctrl <- trainControl(method = "cv", number = 5, savePredictions = "final")
+```
 
 ```{r Random Forest }
 rf_model <- train(HighratingOverallBinary ~ ., data = subtrain, method = "rf", trControl = ctrl)
@@ -784,14 +788,15 @@ confusionMatrix(pred_rf, subtest$HighratingOverallBinary)
 ```{r}
 # Random Forest
 # number of features
-n_features <- length(setdiff(names(baked_train), "X0"))
-n_features #45
+n_features <- length(setdiff(names(subtrain), "HighratingOverallBinary"))
+n_features #13
  
 
 # train a default random forest model using ranger library
+library(ranger)
 rf1 <- ranger(
-  X0 ~ ., 
-  data = baked_train,
+  HighratingOverallBinary ~ ., 
+  data = subtrain,
   mtry = floor(n_features / 3),
   respect.unordered.factors = "order",
   seed = 123
@@ -799,7 +804,7 @@ rf1 <- ranger(
 
 # get Out-of-bag RMSE (OOB RMSE)
 (default_rmse <- sqrt(rf1$prediction.error)) 
-# OOB RMSE = 0.5032%
+# OOB RMSE = 0.2593047
 
 
 # Tunable hyperparameters that we should consider when training a RF model (the tuneable hyperparameters are "mtry", "node.size", "sample.fraction")
@@ -807,7 +812,7 @@ rf1 <- ranger(
 hyper_grid <- expand.grid(
   mtry = floor(n_features * c(.05, .15, .25, .333, .5)),
   min.node.size = c(1, 3, 5, 10, 15, 20),   #Minimum number of oberservations in each node size #Bigger node size = less computational time, but higher error.
-  replace = c(TRUE, FALSE),                 #bagging with replacement or without, default is with replacement, but ranger allows both
+  replace = c(TRUE, FALSE), #bagging with replacement or without, default is with replacement, but ranger allows both
   sample.fraction = c(.5, .63, .8),         #Decides the fraction size of each bag used
   rmse = NA                                               
 )
@@ -816,8 +821,8 @@ hyper_grid <- expand.grid(
 for(i in seq_len(nrow(hyper_grid))) {
   # fit model for ith hyperparameter combination
   fit <- ranger(
-    formula         = X0 ~ ., 
-    data            = baked_train, 
+    formula         = HighratingOverallBinary ~ ., 
+    data            = subtrain, 
     num.trees       = n_features * 10,
     mtry            = hyper_grid$mtry[i],
     min.node.size   = hyper_grid$min.node.size[i],
@@ -846,8 +851,8 @@ hyper_grid %>%
 
 #Train the optimal model, changing values in accordance with the best model obtained from the top 10 above
 OptimalModel <- ranger(
-  formula = X0 ~.,
-  data = baked_train,
+  formula = HighratingOverallBinary ~.,
+  data = subtrain,
   num.trees = 450,
   mtry = 2,
   min.node.size = 5,
@@ -859,7 +864,7 @@ OptimalModel <- ranger(
 
 
 #Making out of sample predictions
-p <- predict(OptimalModel, baked_test)
+p <- predict(OptimalModel, subtest)
 pred <- p$predictions
 
 # rmse <- accuracy(pred, baked_test$X0) #stoppet med at virke efter første gang!? use caret package if problems. (giver det overhovedet mening at beregne RMSE for logistic problems?)
@@ -868,8 +873,8 @@ pred <- p$predictions
 # Feature Importance plot + comparison between impurity and permutation
 # re-run model with impurity-based variable importance
 rf_impurity <- ranger(
-  formula = X0 ~ ., 
-  data = baked_train, 
+  formula = HighratingOverallBinary ~ ., 
+  data = subtrain, 
   num.trees = 450,  # notice the model is re-run with the optimal hyperparam identified before
   mtry = 2,
   min.node.size =5,
@@ -883,8 +888,8 @@ rf_impurity <- ranger(
 
 # re-run model with permutation-based variable importance
 rf_permutation <- ranger(
-  formula = X0 ~ ., 
-  data = baked_train, 
+  formula = HighratingOverallBinary ~ ., 
+  data = subtrain, 
   num.trees = 450,  # notice the model is re-run with the optimal hyperparam identified before
   mtry = 2,
   min.node.size = 5,
@@ -909,7 +914,7 @@ gridExtra::grid.arrange(p1, p2, nrow = 1)
 
 # Confusion Matrix
 confusionMatrix(
-  pred, baked_test$X0, positive = "yes")
+  pred, subtest$HighratingOverallBinary, positive = "1")
 
 #          Reference
 # Prediction  no yes
@@ -945,8 +950,8 @@ ctrl <- trainControl(
 
 # Train the gradient boosting model
 gbmfit <- train(
-  X0 ~ .,                    # Formula for the model
-  data = baked_train,        # Training data
+  HighratingOverallBinary ~ ., # Formula for the model
+  data = subtrain,        # Training data
   method = "gbm",            # Gradient boosting method
   trControl = ctrl,          # Train control object
   verbose = FALSE            # Suppress verbose output
@@ -954,10 +959,10 @@ gbmfit <- train(
 
 # Getting accuracy and kappa from the model trained using caret
 # Obtain predictions from the trained model
-gbm_pred <- predict(gbmfit, newdata = baked_test)
+gbm_pred <- predict(gbmfit, newdata = subtest)
 
 # Create a confusion matrix
-confusion_mat <- confusionMatrix(gbm_pred, baked_test$X0)
+confusion_mat <- confusionMatrix(gbm_pred, subtest$HighratingOverallBinary)
 
 # Extract accuracy and kappa from the confusion matrix
 accuracy <- confusion_mat$overall["Accuracy"] #0.7441 
@@ -976,19 +981,19 @@ library(pROC)
 
 
 # Obtain predicted probabilities from your gradient boosting model
-predicted_probs <- predict(gbmfit, newdata = baked_test, type = "prob")
+predicted_probs <- predict(gbmfit, newdata = subtest, type = "prob")
 
 # Extract the predicted probabilities for the positive class
-positive_probs <- predicted_probs[, "yes"]
+positive_probs <- predicted_probs[, "1"]
 
 # Create a binary outcome vector (1 for positive class, 0 for negative class)
-outcome <- ifelse(baked_test$X0 == "yes", 1, 0)
+outcome <- ifelse(subtest$HighratingOverallBinary == "1", 1, 0)
 
 # Calculate the ROC curve and AUC
-
+library(caTools)
 roc_obj <- roc(outcome, positive_probs)
 plot(roc_obj)
-colAUC(predicted_probs[ , 1], as.character(baked_test$X0), plotROC = T)
+colAUC(predicted_probs[ , 1], as.character(subtest$HighratingOverallBinary), plotROC = T)
 #We get the probabilities from the first model we trained
 #auc_value <- auc(roc_obj) #0.7659
 #auc
@@ -999,9 +1004,9 @@ colAUC(predicted_probs[ , 1], as.character(baked_test$X0), plotROC = T)
 # Hence the AUC of almost 76% is considered a decent performance.
 
 # Confusion Matrix
-predicted_val <- predict(gbmfit, baked_test)
+predicted_val <- predict(gbmfit, subtest)
 confusionMatrix(
-  predicted_val, baked_test$X0, positive = "yes")
+  predicted_val, subtest$HighratingOverallBinary, positive = "1")
 
 #           Reference
 # Prediction  no yes
@@ -1048,12 +1053,15 @@ tune.grid.xgb <- expand.grid(nrounds=300,
                                  colsample_bytree=0.1, 
                                  min_child_weight = 1)
 
-xgbcaret <- train(X0 ~ ., baked_train,
+xgbcaret <- train(HighratingOverallBinary ~ ., subtrain,
                      method = "xgbTree",
                      tuneGrid = tune.grid.xgb,
                      trControl = train.param)
 
 xgbcaret
+xgbcaret$bestTune
+xgbcaret$results
+
 # eta   max_depth  gamma  Accuracy   Kappa    
 # 0.01  3           0     0.7468454  0.2734396
 # 0.01  3           1     0.7568598  0.2965317
@@ -1072,18 +1080,18 @@ vip::vip(xgbcaret)
 
 #Predicting
 # Obtain predicted probabilities from the XG boost model
-predicted_probsXG <- predict(xgbcaret, newdata = baked_test, type = "prob")
+predicted_probsXG <- predict(xgbcaret, newdata = subtest, type = "prob")
 
 # Extract the predicted probabilities for the positive class
-positive_probsXG <- predicted_probsXG[, "yes"]
+positive_probsXG <- predicted_probsXG[, "1"]
 
 # Create a binary outcome vector (1 for positive class, 0 for negative class)
-outcomeXG <- ifelse(baked_test$X0 == "yes", 1, 0)
+outcomeXG <- ifelse(subtest$HighratingOverallBinary == "1", 1, 0)
 
 # Calculate the ROC curve and AUC
 roc_objXG <- roc(outcomeXG, positive_probsXG)
 roc_objXG
-colAUC(predicted_probsXG[ , 1], as.character(baked_test$X0), plotROC = T) #0.7543
+colAUC(predicted_probsXG[ , 1], as.character(subtest$HighratingOverallBinary), plotROC = T) #0.7543
 # Area Under the Curve is 75.43%
 # The ROC curve is a graphical representation of the models sensitivity and 1-specificity and to evaluate the performance of a model
 # predicting a binary variable we can evaluate the Area Under the Curve which represent a number between 0 and 1, where the closer to
@@ -1095,9 +1103,9 @@ rmse <- RMSE(positive_probsXG, outcomeXG) #0.4126
 1-rmse #0.5873
 
 # Confusion Matrix
-predicted_val <- predict(xgbcaret, baked_test)
+predicted_val <- predict(xgbcaret, subtest)
 confusionMatrix(
-  predicted_val, baked_test$X0, positive = "yes")
+  predicted_val, subtest$HighratingOverallBinary, positive = "1")
 
 #           Reference
 #Prediction  no yes
@@ -1167,7 +1175,7 @@ churn_svm <- train(
   data = subtrain,
   method = "svmRadial",               
   preProcess = c("center", "scale"),  
-  trControl = trainControl(method = "cv", number = 10),
+  trControl = trainControl(method="cv",number = 10),#first draft
   tuneLength = 10
 )
 ```
@@ -1253,38 +1261,20 @@ Evaluating whether it is preferable to focus on the employees having
 - high scores on HighratingOverallBinary= 1
 From a business perspective, the employees being unsatisfied is the ones we want to focus on at first: Choose 0 as reference
 ```{r Feature Importance - reference class}
+#install.packages("kernlab")
+library(kernlab)
 prob_0 <- function(object, newdata) {
-  predict(object, newdata = newdata, type = "prob")[, "0"]
+  predict(object, newdata = newdata, type = "prob")[, "X1"]
 }
 ```
 
-Variance Importance Plot 
 ```{r VIP plot}
-#install.packages("DALEX")
-library(DALEX)
-library(iml)
-library(vip)
-set.seed(123)
-vip(churn_svm_auc,
-    method = "permute", 
-    nsim = 5, 
-    train = subtrain, 
-    target = "HighratingOverallBinary",
-    metric = yardstick::roc_auc,
-    metric_options = list(smaller_is_better = F),
-    #metric = "auc", 
-    reference_class = "0", 
+set.seed(123)  # for reproducibility
+vip::vip(churn_svm_auc, method = "permute", event_level = "second", nsim = 5, train = subtrain, 
+    target = "HighratingOverallBinary", metric = "roc_auc", reference_class = "X1", 
     pred_wrapper = prob_0)
 ```
 
-```{r}
-importance <- varImp(churn_svm_auc)  # 'scale = TRUE' scales the importance scores
-
-# Print the importance
-print(importance)
-# Plotting variable importance
-plot(importance)
-```
 
 ### SVM HOM - PDP 
 
@@ -1293,9 +1283,11 @@ Additionally, since the predicted probabilities from our model come in two colum
 ```{r}
 #install.packages("pdp")
 library(pdp)
+library(gridExtra)
 #construct PDP (feature effect plots are on the probability scale)
-features <- c("ratingRecommendToFriend", "ratingWorkLifeBalance", 
-              "ratingSeniorLeadership", "ratingCultureAndValues")
+features <- c("ratingCareerOpportunities", "ratingCultureAndValues", 
+              "ratingCompensationAndBenefits", "ratingRecommendToFriend")
+
 pdps <- lapply(features, function(x) {
   partial(churn_svm_auc, 
           pred.var = x, 
@@ -1308,7 +1300,10 @@ pdps <- lapply(features, function(x) {
 grid.arrange(grobs = pdps,  ncol = 2)
 # interpret
 ```
-
+PDPs show the marginal effect of a single feature on the predicted outcome of a machine learning model while averaging out the effects of all other features.
+ - X-axis (yhat): Represents the predicted probability of the outcome (likely the probability of a certain class, e.g., churn).
+ - Y-axis (ratingCareerOpportunities): Represents the values of the ratingCareerOpportunities feature.
+ - Pattern: The plot shows how changes in ratingCareerOpportunities affect the predicted probability of the outcome. If the line is horizontal, it indicates no effect; otherwise, it shows the nature of the relationship (positive, negative, or non-linear).
 
 #Moving Beyond Linearity
 
