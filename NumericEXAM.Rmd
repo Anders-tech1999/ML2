@@ -21,6 +21,26 @@ library(visdat)   # for additional visualizations
 # Feature engineering packages
 library(caret)    # for various ML tasks
 library(recipes)  # for feature engineering tasks
+
+library(DataExplorer) # for data exploration
+library(caTools)      # Data splits
+library(rsample)      # for resampling procedures
+library(Hmisc)        # Missing data handling
+library(Metrics)#      # Performance measures
+library(reshape2)
+library(rpart)        # for fitting decision trees
+library(ipred)        # for fitting bagged decision trees #used in bagging in addition to random forest e.g. to compare bagging vs rf (but RF will dominate)
+library(randomForest) # for fitting bagged decision trees
+library(ranger)       # a c++ implementation of random forest 
+library(h2o)          # a java-based random forest
+library(modeldata)#    # for data set Job attrition
+library(kernlab)      # also for fitting SVMs 
+library(pdp)          # for partial dependence plots, etc.
+library(forecast)#     # Library for performance evaluation
+library(gbm)          # For Gradient Boosting models
+library(pROC)         # For AUC
+library(ROCR)         # For ROC AUC
+library(kernlab) 
 ```
 
 
@@ -50,8 +70,6 @@ plot_missing(empNumeric)
 ## reviewId: Unique identifier for each review
 
 ```{r reviewId}
-library(tidyverse)
-library(DataExplorer)
 str(empNumeric$reviewId)
 empNumeric$reviewId <- NULL
 ```
@@ -100,7 +118,6 @@ ggplot(empNumeric, aes(x = as.factor(reviewYear))) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x labels for better visibility if needed
 
 summary(empNumeric$reviewYear)
-
 ```
 The reviewDateTime variable has been split into
 reviewYear
@@ -140,6 +157,7 @@ Do we want to obtain RMSE measures or Accuracy measures?
 
 ```{r isCurrentJob replacing NAs with 0}
 library(dplyr)
+library(tidyverse)
 # Replace NA values with 0s
 empNumeric <- empNumeric %>% 
   mutate(isCurrentJob = replace_na(isCurrentJob, 0))
@@ -188,12 +206,12 @@ to zero. This is assessed being a flawed respondent, as it is assumed that this 
 ```{r deleting instances having 0s in several categorical 0-5 and ratingOverall 3-5}
 # Since there's still some giving 0's another subset of data will be made, deleting all the rows where 
 # the respondant answered 0
-empNumeric <- empNumeric[!(empNumeric$ratingCareerOpportunities == 0 |
-                         empNumeric$ratingCompensationAndBenefits == 0 |
-                         empNumeric$ratingCultureAndValues == 0 |
-                         empNumeric$ratingDiversityAndInclusion == 0 |
-                         empNumeric$ratingSeniorLeadership == 0 |
-                         empNumeric$ratingWorkLifeBalance == 0), ]
+#empNumeric <- empNumeric[!(empNumeric$ratingCareerOpportunities == 0 |
+#                         empNumeric$ratingCompensationAndBenefits == 0 |
+#                         empNumeric$ratingCultureAndValues == 0 |
+#                         empNumeric$ratingDiversityAndInclusion == 0 |
+#                         empNumeric$ratingSeniorLeadership == 0 |
+#                         empNumeric$ratingWorkLifeBalance == 0), ]
 plot_histogram(empNumeric)
 ```
 
@@ -241,12 +259,32 @@ empNumeric$employmentStatus <- as.numeric(empNumeric$employmentStatus)
 glimpse(empNumeric)
 ```
 
+IF ASKED FOR NUMERIC PREDICTORS AND FACTOR DV
+```{r empNumericDVFactor}
+empNumericDVFactor <- empNumeric
+
+empNumericDVFactor$factorratingOverall <- factor(empNumericDVFactor$ratingOverall, levels = c(1, 2, 3, 4, 5), ordered = TRUE)
+
+empNumericDVFactor$ratingOverall <- NULL
+
+# IF Factors desired for actual factor variables
+#empNumericDVFactor$ratingCeo <- factor(empNumericDVFactor$ratingCeo)
+#empNumericDVFactor$ratingBusinessOutlook <- factor(empNumericDVFactor$ratingBusinessOutlook)
+#empNumericDVFactor$ratingRecommendToFriend <- factor(empNumericDVFactor$ratingRecommendToFriend)
+#empNumericDVFactor$employmentStatus <- factor(empNumericDVFactor$employmentStatus)
+
+dim(empNumericDVFactor)
+glimpse(empNumericDVFactor)
+```
+
+
 # Data Preparation
 
 ```{r datasplit standard}
 library(rsample)
 set.seed(123) # Set a random seed for replication purposes
-numericsplit <- initial_split(empNumeric, prop = 0.70, strata = "ratingOverall")
+numericsplit <- initial_split(empNumeric, prop = 0.7, strata = "ratingOverall")
+
 numerictrain  <- training(numericsplit)
 numerictest   <- testing(numericsplit)
 dim(numerictrain)
@@ -282,7 +320,13 @@ dim(numericbaked_test)
 ```
 
 If computation is heavy
-```{r downsizing datasplit }
+Remember to CHOOSE dataset in 
+ - random_indices <- sample(1:nrow(EMPFACTORBINARY), 1000)
+ - subempFactor <- EMPFACTORBINARY[random_indices, ]
+as well as DV in
+ - subsplit  <- initial_split(subempFactor, prop = 0.7, strata = "HIGHRATINGOVERALLBINARY")
+```{r downsizing datasplit numeric ratingoverall }
+library(rsample)
 set.seed(123)
 random_indices <- sample(1:nrow(empNumeric), 1000)
 sub_empNumeric<- empNumeric[random_indices, ]
@@ -291,6 +335,19 @@ subsplitnumeric  <- initial_split(sub_empNumeric, prop = 0.7, strata = "ratingOv
 subtrainnumeric <- training(subsplitnumeric)
 subtestnumeric  <- testing(subsplitnumeric)
 ```
+
+```{r downsizing datasplit factor ratingoverall }
+library(rsample)
+set.seed(123)
+random_indices <- sample(1:nrow(empNumericDVFactor), 1000)
+sub_empNumeric<- empNumericDVFactor[random_indices, ]
+
+subsplitnumeric  <- initial_split(sub_empNumeric, prop = 0.7, strata = "factorratingOverall")
+subtrainnumeric <- training(subsplitnumeric)
+subtestnumeric  <- testing(subsplitnumeric)
+```
+
+REMEMBER TO CHANGE DV IN RECIPE
 
 ```{r Recipe subset }
 #Creating the blueprint
@@ -482,246 +539,92 @@ HERE IS STATES THAT RF does not work on numeric DV's^^^^
 
 
 
+#Moving Beyond Linearity
 
+## GAM Generalized Additive Model logistic Regression - Y binary
 
+-	GAMs require the selection of df for each (continuous) IVs
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# from Ralle + Boysen MODEL DEVELOPMENT
-
-```{r Boysen}
-library(rsample)
-set.seed(123) # Set a random seed for replication purposes
-job_split <- initial_split(emp, prop = 0.80, strata = "ratingOverall")
-job_train  <- training(job_split)
-job_test   <- testing(job_split)
-=======
-
-# Alina part - Numeric
-
-```{r dataload}
-library(readxl)
-Data <- read_excel("C:/Users/Bruger/OneDrive - Aarhus universitet/8. semester - BI/ML2 - Machine Learning 2/ML2EXAM/Data.xls")
-empNumeric <- Data
-```
-
-```{r}
-#install.packages("visdat")
+Fitting a logistic regression GAM (if Y is binary)
+ - fitting a GAM to the wage data to predict the probability that an individual exceeds $250.000 per year 
+```{r GAM logistic Regression - Y binary}
+library(gam)
+gam.lr = gam(I(subtrainnumeric$ratingOverall>2.5) ~ ratingRecommendToFriend + ratingSeniorLeadership + ratingWorkLifeBalance, family=binomial, data = subtrainnumeric) #  a smooth splines with df = 5 for age and a step function for education  
+#par(mfrow=c(1,3))
+plot(gam.lr,se=T,col="green") # last plot looks suspicios
 ```
 
 
-```{r packages}
-# Helper packages
-library(dplyr)    # for data manipulation
-library(ggplot2)  # for awesome graphics
-library(visdat)   # for additional visualizations
-# Feature engineering packages
-library(caret)    # for various ML tasks
-library(recipes)  # for feature engineering tasks
+```{r ratingRecommendToFriend GAM logistic Regression}
+table(empNumeric$ratingRecommendToFriend,I(empNumeric$ratingOverall>2.5))
+```
+FALSE: employees ratingOverall < 2.5
+- 1332 ratingOverall= Low which is NOT RecommendingToFriend
+- 80 ratingOverall= Low which is YES RecommendingToFriend
+
+TRUE: employees ratingOverall > 2.5
+- 1265 ratingOverall= High which is NOT RecommendingToFriend
+- 5746 ratingOverall= High which is YES RecommendingToFriend
+
+```{r ratingSeniorLeadership GAM logistic Regression}
+table(empNumeric$ratingSeniorLeadership,I(empNumeric$ratingOverall>2.5))
 ```
 
-
-```{r data structure - overview}
-library(dplyr)
-glimpse(empNumeric)
-```
-character string (<chr>): these should be transformed into categorical variables
-numeric <dbl>
-
-```{r Missing overview}
-library(visdat)
-sum(is.na(empNumeric))
-vis_miss(empNumeric, cluster = TRUE) #visdat library
-plot_missing(empNumeric)
-```
-- no NA's in variables: reviewId, reviewDateTime, ratingOverall, ratingWorkLifeBalance, ratingCultureAndValues, -	ratingDiversityAndInclusion, ratingSeniorLeadership, ratingCareerOpportunities, ratingCompensationAndBenefits, lengthOfEmployment
-- NA's from 0% - 5%: employmentStatus
-- NA's from 5% - 10%: jobTitle.text
-- NA's from 10% - 40%: ratingRecommendToFriend, isCurrentJob, location.name
-- NA's from 40% -> : jobEndingYear
-
-
-## reviewId: Unique identifier for each review
-
-```{r reviewId}
-library(tidyverse)
-library(DataExplorer)
-str(empNumeric$reviewId)
-empNumeric$reviewId <- NULL
-```
-DELETE THIS VARIABLE
-
-## reviewDateTime: Timestamp of when the review was submitted
-
-```{r reviewDateTime }
-str(empNumeric$reviewDateTime)
-```
-follows the standard ISO 8601 format: YYYY-MM-DDTHH:MM:SS.fff, where:
-YYYY represents the year,
-MM the month,
-DD the day,
-T is a separator (indicating the start of the time portion),
-HH the hour (in 24-hour format),
-MM the minutes,
-SS the seconds,
-fff the milliseconds.
-- given this interpretation, the information after the T-separator is evaluated as being redundant. Therefore the variable is being transformed into a numeric obtaining the Year variable
-
-```{r Create year}
-library(lubridate) 
-# Convert 'reviewDateTime' from character to POSIXct format (if not already)
-empNumeric$reviewDateTime <- ymd_hms(empNumeric$reviewDateTime)
-
-# Extract the year and convert it to numeric format
-empNumeric$reviewYear <- year(empNumeric$reviewDateTime)
-```
-reviewYear is created being a numeric with range 2013->2024.
-
-```{r EDA reviewYear}
-library(tidyverse)
-library(DataExplorer)
-library(ggplot2)
-
-# Create a bar plot
-ggplot(empNumeric, aes(x = as.factor(reviewYear))) +
-  geom_bar(stat = "count", fill = "blue", color = "black") +  # Count is default, explicitly stating for clarity
-  labs(x = "Review Year", y = "Number of Reviews", title = "Distribution of Reviews by Year") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x labels for better visibility if needed
-
-summary(empNumeric$reviewYear)
-
-```
-The reviewDateTime variable has been split into
-reviewYear
-- a numeric variable having the vast majority of observations from the year 2023. The next coming years 2022 and 2024 do also represent a fair amount of the observations. The years including 2021 and before, are bearing a very minor part of the years, as these reviews could be consideres deleted.
-
-
-## ratingOverall: Overall rating given to the company by the employee
-This is the variable to predict based on the other features
-
-```{r Factorize/ordering ratingOverall}
-empNumeric$ratingOverall <- factor(empNumeric$ratingOverall)
-summary(empNumeric$ratingOverall)
-# Convert to an ordinal factor
-empNumeric$ratingOverall <- factor(empNumeric$ratingOverall, levels = c(1, 2, 3, 4, 5), ordered = TRUE)
-```
-Making the variable ordinal scaled: ordered = TRUE
-
-```{r Histogram ratingOverall }
-histogram(empNumeric$ratingOverall)
-
-# Load the ggplot2 library
-library(ggplot2)
-
-# Create a histogram of ratingOverall
-ggplot(empNumeric, aes(x = ratingOverall)) +
-  geom_histogram(stat = "count", fill = "steelblue", color = "black", binwidth = 1) +
-  labs(x = "Overall Rating", y = "Frequency", title = "Distribution of Overall Ratings") +
-  theme_minimal() +
-  scale_x_discrete(limits = c("1", "2", "3", "4", "5"))  # Ensure that all rating levels are shown even if some have 0 counts
-```
-Discuss wether ratingOverall yields the best insights being numeric or being a factor?
-Do we want to obtain RMSE measures or Accuracy measures? 
-
-COMMON ANSWER: make into ordinal scale
-
-#DEALING WITH MISSING
-
-```{r isCurrentJob replacing NAs with 0}
-library(dplyr)
-# Replace NA values with 0s
-empNumeric <- empNumeric %>% 
-  mutate(isCurrentJob = replace_na(isCurrentJob, 0))
-summary(empNumeric$isCurrentJob)
-```
-isCurrentJob:
-- the 39% missing values are being evaluated as "Informative missing values" (Kuhn and Johnson 2013). As the variable only contains 1s and NAs, these NAs are indeed an informative missing value which requires being transformed into 0s.
-
-
-Deleting variables: jobEndingYear,jobTitle.text,location.name
-
-jobEndingYear
-- deleting this variable due to the 61% Missings. As support for this deletion, the variable isCurrentJob is evaluated as having an adequate extent of information given in jobEndingYear.
-
-jobTitle.text
-- Deleting this variable as we have a huge amount of different jobtitles, namely 2733 various instances, whereas these do not contribute with anything but noise to the dataset.
-
-location.name
-- Deleting this variable as we have a huge amount of different location anmes, namely 1201 various instances, whereas these do not contribute with anything but noise to the dataset.
-
-
-```{r Delete jobEndingYear;jobTitle.text;location.name}
-empNumeric <- subset(empNumeric, select = -c(jobEndingYear))
-empNumeric <- subset(empNumeric, select = -c(jobTitle.text))
-empNumeric <- subset(empNumeric, select = -c(location.name))
+```{r ratingWorkLifeBalance GAM logistic Regression}
+table(empNumeric$ratingWorkLifeBalance,I(empNumeric$ratingOverall>2.5))
 ```
 
-Deleting NAs for the four variables and prevent making imputations, because it is assumed that it is easier to impute a value there is numeric compared to a variable there are based on your feelings and opinions
-```{r Delete NAs ratingCeo;ratingBusinessOutlook;employmentStatus;ratingRecommendToFriend}
-empNumeric <- empNumeric[!is.na(empNumeric$ratingCeo), ]
-empNumeric <- empNumeric[!is.na(empNumeric$ratingBusinessOutlook), ]
-empNumeric <- empNumeric[!is.na(empNumeric$employmentStatus), ]
-empNumeric <- empNumeric[!is.na(empNumeric$ratingRecommendToFriend), ]
-
-sum(is.na(empNumeric))
+NOT PREFORMED YET
+```{r Refit GAM logistic Regression}
+# Refit the model using all except this category of education
+gam.lr.s = gam(I(wage>250) ~ year + s(age,df=5) + education, family=binomial, data = Wage,subset=(education!="1. < HS Grad"))
+plot(gam.lr.s,se=T,col="green")
+# As all plots have an identical scale, we can assess the relative contributions of the 3 variables: 
+# Age and education have a relatively larger effect on the probability of earning more than 250.000 per year (p. 287 ISL)
 ```
 
-From Exploratory Data Analysis is seen in the dataset, that 310 respondents is scoring ratingOverall with a value from 3-5 and at the same score 
-- ratingCareerOpportunities,
-- ratingCompensationAndBenefits,
-- ratingCultureAndValues,
-- ratingDiversityAndInclusion,
-- ratingSeniorLeadership,
-- ratingWorkLifeBalance
-to zero. This is assessed being a flawed respondent, as it is assumed that this respondent does not take a stand on the above listed question-categories.
-```{r deleting instances having 0s in several categorical 0-5 and ratingOverall 3-5}
-# Since there's still some giving 0's another subset of data will be made, deleting all the rows where 
-# the respondant answered 0
-empNumeric <- empNumeric[!(empNumeric$ratingCareerOpportunities == 0 |
-                         empNumeric$ratingCompensationAndBenefits == 0 |
-                         empNumeric$ratingCultureAndValues == 0 |
-                         empNumeric$ratingDiversityAndInclusion == 0 |
-                         empNumeric$ratingSeniorLeadership == 0 |
-                         empNumeric$ratingWorkLifeBalance == 0), ]
-plot_histogram(empNumeric)
+Adding smoothing splines to the IVs
+
+```{r smooth GAM logistic Regression - Y binary}
+library(gam)
+gam.lr.smooth = gam(I(ratingOverall>2.5) ~ ratingRecommendToFriend + s(ratingSeniorLeadership,df=5) + s(ratingWorkLifeBalance,df=5), family=binomial, data = subtrainnumeric) #  a smooth splines with df = 5 for age and a step function for education  
+#par(mfrow=c(1,3))
+plot(gam.lr.smooth,se=T,col="green") # last plot looks suspicios
+```
+The tables do not reacts to the smoothing splines
+```{r smooth ratingSeniorLeadership GAM logistic Regression}
+table(s(empNumeric$ratingSeniorLeadership,df=5),I(empNumeric$ratingOverall>2.5))
+```
+```{r smooth ratingWorkLifeBalance GAM logistic Regression}
+table(s(empNumeric$ratingWorkLifeBalance,df=5),I(empNumeric$ratingOverall>2.5))
 ```
 
-ratingCeo, ratingBusinessOutlook, ratingRecommendToFriend, employmentStatus
-- factorizing these variables into categorical variables.
+Comparing GAM models with and without smoothing splines
+-  Do we need a nonlinear term for year? 
+Using ANOVA for comparing the previous model with a model that includes a smooth spline of year with df=4
 
-lengthOfEmployment
-- scaling lenght of employment
-```{r Factorize categorical variables + scaling}
-empNumeric$ratingCeo <- factor(empNumeric$ratingCeo)
-empNumeric$ratingBusinessOutlook <- factor(empNumeric$ratingBusinessOutlook)
-empNumeric$ratingRecommendToFriend <- factor(empNumeric$ratingRecommendToFriend)
-empNumeric$employmentStatus <- factor(empNumeric$employmentStatus)
-
-empNumeric$lengthOfEmployment <- scale(empNumeric$lengthOfEmployment)
-
-glimpse(empNumeric)
+```{r ANOVA for compare GAM models}
+anova(gam.lr, gam.lr.smooth, test="Chisq") #  Chi-square test as Dep variable is categorical 
 ```
+- Model 1/gam.lr 
+- residual deviance of 3606.5 
+- 8419 residual degrees of freedom.
+
+Model 2/gam.lr.smooth 
+- lower residual deviance of 3412.7 
+- 8411 residual degrees of freedom. 
+
+This suggests that Model 2, with the additional smooth terms, explains more of the variance in the data than Model 1.
+The p-value supports the advantage of Model as it is statistically significant in comparison
+
+
+
+
+
+
+
+
+
 
 # MODEL DEVELOPMENT
 
-```{r Boysen}
-library(rsample)
-set.seed(123) # Set a random seed for replication purposes
-job_split <- initial_split(emp, prop = 0.80, strata = "ratingOverall")
-job_train  <- training(job_split)
-job_test   <- testing(job_split)
->>>>>>> 63dc1c65cf50349f1b453a9fccae7d737922855f
-```

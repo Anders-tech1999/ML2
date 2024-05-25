@@ -356,6 +356,8 @@ dim(subtrain)
 dim(subtest)
 ```
 
+REMEMBER TO CHANGE DV IN RECIPE
+
 ```{r Recipe subset }
 #Creating the blueprint
 subrecipe <- recipe(HighratingOverall_binary ~ ., data = subempFactor) %>%
@@ -386,123 +388,6 @@ dim(subbaked_test)
 ```
 
 #Model Development
-
-## 8.3.1 Fitting Classification Trees (ISLRp.353)'
-
-In this case the whole dataset empFactor is used.
-
-```{r Fit tree}
-#install.packages("ISLR2")
-library(tree)
-library(ISLR2)
-#using carseats as pseudocode
-tree.carseats <- tree(HighratingOverallBinary ~ ., subtrain) #consider change this into subtrain + subtest
-summary(tree.carseats)
-```
-Variables actually used in tree construction:
-[1] "ratingRecommendToFriend"   "ratingSeniorLeadership"   
-[3] "ratingCareerOpportunities" "ratingCultureAndValues"
-
-Number of terminal nodes:  6
-- Terminal nodes, or leaf nodes, are the end points of the tree where predictions are made. 
-- The number of terminal nodes can give you an idea of the complexity of the model: more nodes generally mean a more complex model.
-
-Residual mean deviance:  0.3889 = 3153 / 8107 
-- a small deviance indicates a tree that provides a good fit to the
-(training) data. 
-- the residual mean deviance reported is simply the deviance divided by n − |T0|
-
-Misclassification error rate: 0.08776 = 712 / 8113 
-- training error rate is 0.08776, which means that approximately 8.776% of the predictions made by the tree were incorrect. 
-- this is calculated as 712 misclassified observations out of a total of 813 observations used in the model.
-
-use the plot() function to display the tree structure, and the text() function to display the node labels. The argument pretty = 0 instructs R to include the category names for any qualitative predictors, rather than simply displaying a letter for each category
-```{r tree plot}
-plot(tree.carseats)
-text(tree.carseats , pretty = 0)
-```
-Rating Recommend To Friend: NEGATIVE
-- the root node of the tree, where the first decision is made. It indicates that the initial split in the dataset was made based on the predictor "ratingRecommendToFriend," specifically when the rating is NEGATIVE. 
-- this decision or split was deemed most informative in predicting the target variable at this stage.
-
-Deeper in the tree, other variables are presented with decisions
-
-```{r Tree metrics and measures}
-tree.carseats
-```
-1) root 8113 7307.0 1 ( 0.166523 0.833477 )
-8113: all observations in df
-7307.0: deviance
-1: the majority class (which is Highoverallrating)
-( 0.166523 0.833477 ): probability of Highoverallrating
-
-2) ratingRecommendToFriend: NEGATIVE 2495 3457.0 0 ( 0.511824 0.488176 )  
-2): first split
-ratingRecommendToFriend: NEGATIVE: the tree first splits the data based on whether this rating is NEGATIVE
-2495: observation quantity, has fewer compared to the root because it only includes cases where the condition is true.
-3457.0: deviance here is smaller compared to the root, indicating a better fit for these observations under this condition.
-
-4) ratingSeniorLeadership: 1 1237 1368.0 0 ( 0.758286 0.241714 )
-- subsequent nodes are based on other ratings like "ratingSeniorLeadership" and "ratingCareerOpportunities," with specific levels indicated (e.g., "1" or "2,3,4,5").
-
-We extract this above table to gain accurate information about the decision tree nodes
-
-
-Evaluating performance of a classification tree on these data, the test error is estimated. Splitting the observations into a training set and a test set, building the tree using the training set, and evaluate its performance on the test data. 
-The predict() function can be used for this purpose. In the case
-of a classification tree, the argument type = "class" instructs R to return the actual class prediction. 
-```{r Tree test predictions}
-set.seed(123)
-
-treetrain <- sample(1:nrow(empFactorBinary), 800)
-empFactorBinary.test <- empFactorBinary[-treetrain , ]
-High.test <- empFactorBinary$HighratingOverallBinary[-treetrain]
-
-tree.empFactorBinary <- tree(HighratingOverallBinary ~ ., data = empFactorBinary, subset = treetrain)
-tree.pred <- predict(tree.empFactorBinary, empFactorBinary.test, type = "class")
-
-table(tree.pred, High.test)
-#((948+5663)/(948+5663+445+257))
-```
-correct predictions for 90,4% of the locations in the test data set
-
-###8.3.1 Pruning
-Next, we consider whether pruning the tree might lead to improved results. The function cv.tree() performs cross-validation in order to determine the optimal level of tree complexity; cost complexity pruning is used in order to select a sequence of trees for consideration. We use the argument FUN = prune.misclass in order to indicate that we want the classification error rate to guide the cross-validation and pruning process, rather than the default for the cv.tree() function, which is deviance. The cv.tree() function reports the number of terminal nodes of each tree considered (size) as well as the corresponding error rate and the value of the cost-complexity parameter used (k, which corresponds to α)
-
-```{r Prune output}
-set.seed(123)
-cv.carseats <- cv.tree(tree.carseats , FUN = prune.misclass)
-names(cv.carseats)
-cv.carseats
-```
-The output is assessed by comparing the node "size" to the deviance of these exact nodes
-- in this case nodes 6 and 3 have the same deviance 753
-- Proceeding to gain test error measures
-
-```{r Prune plot: node size + k complexity parameter}
-par(mfrow = c(1, 2))
-plot(cv.carseats$size, cv.carseats$dev, type = "b")
-plot(cv.carseats$k, cv.carseats$dev, type = "b")
-```
-Choosing the Optimal Tree Size (deviance///size): 
-- these plots are used to select the optimal tree size (number of terminal nodes). You typically look for the tree size corresponding to the lowest point on the deviance plot or the smallest tree size
-
-Complexity Parameter (k): 
-- the plot of k vs. deviance helps in understanding how sensitive the tree is to the pruning process. A sharp increase in deviance as k increases indicates a point beyond which the tree loses significant predictive accuracy
-
-```{r Prune Tree plot}
-prune.carseats <- prune.misclass(tree.carseats , best = 3)
-plot(prune.carseats)
-text(prune.carseats , pretty = 0)
-```
-
-```{r PruneTree test predictions}
-tree.pred <- predict(prune.carseats , empFactorBinary.test,type = "class")
-table(tree.pred, High.test)
-((840+5844)/(840+5844+264+367))
-```
-correct predictions for 91,37% of the locations in the test data set WITH PRUNING the decision tree. The test accuracy gains 0.0097 percentagepoints by using pruning having 3 terminal nodes instead of 6. (0.9137-0.9040 = 0.0097)
-
 
 
 ## 8.4.9 EXE 9 - fit Classification Trees
@@ -1364,8 +1249,6 @@ hyper_grid <- expand.grid(
 )
 hyper_grid
 ```
-
-
 
 ```{r CV model}
 library(earth)
