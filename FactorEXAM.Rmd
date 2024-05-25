@@ -151,11 +151,6 @@ head(empFactor$HighratingOverallBinary)
 No need for deleting on or the other yet: creating a new df below!
 REMEMBER to use ONLY ONE FORMAT of the ratingOverall variable
 
-```{r if asked for numeric ratingOverall}
-empFactor$numericratingOverall <- as.numeric(empFactor$ratingOverall)
-```
-REMEMBER to use ONLY ONE FORMAT of the ratingOverall variable
-
 
 #DEALING WITH MISSING
 
@@ -248,13 +243,28 @@ glimpse(empFactor)
 empFactorBinary <- empFactor
 empFactorBinary$ratingOverall <- NULL
 
+empFactor$HighratingOverallBinary <- NULL
+
 dim(empFactorBinary)
 glimpse(empFactorBinary)
+```
+
+```{r Creating DVnumeric df}
+empFactorDVNumeric <- empFactor
+
+empFactorDVNumeric$numericratingOverall <- as.numeric(empFactorDVNumeric$ratingOverall)
+
+empFactorDVNumeric$ratingOverall <- NULL
+empFactorDVNumeric$HighratingOverallBinary <- NULL
+
+dim(empFactorDVNumeric)
+glimpse(empFactorDVNumeric)
 ```
 
 ```{r}
 sum(is.na(empFactor))
 sum(is.na(empFactorBinary))
+sum(is.na(empFactorDVNumeric))
 ```
 
 
@@ -300,12 +310,44 @@ dim(baked_test)
 
 
 If computation is heavy
-```{r downsizing datasplit }
+Remember to CHOOSE dataset in 
+ - random_indices <- sample(1:nrow(EMPFACTORBINARY), 1000)
+ - subempFactor <- EMPFACTORBINARY[random_indices, ]
+as well as DV in
+ - subsplit  <- initial_split(subempFactor, prop = 0.7, strata = "HIGHRATINGOVERALLBINARY")
+
+```{r downsizing datasplit DVBinary }
 set.seed(123)
 random_indices <- sample(1:nrow(empFactorBinary), 1000)
 subempFactor <- empFactorBinary[random_indices, ]
 
 subsplit  <- initial_split(subempFactor, prop = 0.7, strata = "HighratingOverallBinary") #Important to distinguish between binary and 5-level variable!
+subtrain <- training(subsplit)
+subtest  <- testing(subsplit)
+
+dim(subtrain)
+dim(subtest)
+```
+
+```{r downsizing datasplit 5-level DV }
+set.seed(123)
+random_indices <- sample(1:nrow(empFactor), 1000)
+subempFactor <- empFactor[random_indices, ]
+
+subsplit  <- initial_split(subempFactor, prop = 0.7, strata = "ratingOverall") #Important to distinguish between binary and 5-level variable!
+subtrain <- training(subsplit)
+subtest  <- testing(subsplit)
+
+dim(subtrain)
+dim(subtest)
+```
+
+```{r downsizing datasplit DVNumeric }
+set.seed(123)
+random_indices <- sample(1:nrow(empFactorDVNumeric), 1000)
+subempFactor <- empFactorDVNumeric[random_indices, ]
+
+subsplit  <- initial_split(subempFactor, prop = 0.7, strata = "numericratingOverall") #Important to distinguish between binary and 5-level variable!
 subtrain <- training(subsplit)
 subtest  <- testing(subsplit)
 
@@ -320,11 +362,11 @@ subrecipe <- recipe(HighratingOverall_binary ~ ., data = subempFactor) %>%
   #step_impute_knn(all_predictors(), neighbors = 5) %>%
   #step_BoxCox(all_outcomes()) %>%
   #step_YeoJohnson(all_numeric(), -all_outcomes()) %>%
-  # step_other(all_nominal(), threshold = 0.05, other = "Other") %>%  #lumping if needed
+  # step_other(all_nominal(),threshold=0.05, other = "Other") %>%
   step_center(all_numeric(), -all_outcomes()) %>%
   step_scale(all_numeric(), -all_outcomes()) %>%
   step_dummy(all_nominal(), -all_outcomes(), one_hot = FALSE) %>% #produces dummy encoding (True is one-hot encoding)
-  step_nzv(all_predictors()) # using NZV last removes X factor levels with near zero variance
+  step_nzv(all_predictors()) #removes factor levels with nzv
 subrecipe
 
 #Preparing the blueprint based on training data
@@ -721,6 +763,374 @@ table(Caravan.test$Purchase, lm.pred)
 
 
 
+##LauB RF Random Forest
+
+
+```{r Random Forest }
+rf_model <- train(HighratingOverallBinary ~ ., data = subtrain, method = "rf", trControl = ctrl)
+summary(rf_model)
+```
+
+```{r predictions RF + Accuracy}
+# Make predictions
+pred_rf <- predict(rf_model, newdata = subtest)
+
+# Evaluate the models' performance
+confusionMatrix(pred_rf, subtest$HighratingOverallBinary)
+```
+
+##LauB RF Random Forest PART2
+
+```{r}
+# Random Forest
+# number of features
+n_features <- length(setdiff(names(baked_train), "X0"))
+n_features #45
+ 
+
+# train a default random forest model using ranger library
+rf1 <- ranger(
+  X0 ~ ., 
+  data = baked_train,
+  mtry = floor(n_features / 3),
+  respect.unordered.factors = "order",
+  seed = 123
+)
+
+# get Out-of-bag RMSE (OOB RMSE)
+(default_rmse <- sqrt(rf1$prediction.error)) 
+# OOB RMSE = 0.5032%
+
+
+# Tunable hyperparameters that we should consider when training a RF model (the tuneable hyperparameters are "mtry", "node.size", "sample.fraction")
+# create hyperparameter grid
+hyper_grid <- expand.grid(
+  mtry = floor(n_features * c(.05, .15, .25, .333, .5)),
+  min.node.size = c(1, 3, 5, 10, 15, 20),   #Minimum number of oberservations in each node size #Bigger node size = less computational time, but higher error.
+  replace = c(TRUE, FALSE),                 #bagging with replacement or without, default is with replacement, but ranger allows both
+  sample.fraction = c(.5, .63, .8),         #Decides the fraction size of each bag used
+  rmse = NA                                               
+)
+
+# execute full cartesian grid search (where we assess every combination of hyperparameters of interest)
+for(i in seq_len(nrow(hyper_grid))) {
+  # fit model for ith hyperparameter combination
+  fit <- ranger(
+    formula         = X0 ~ ., 
+    data            = baked_train, 
+    num.trees       = n_features * 10,
+    mtry            = hyper_grid$mtry[i],
+    min.node.size   = hyper_grid$min.node.size[i],
+    replace         = hyper_grid$replace[i],
+    sample.fraction = hyper_grid$sample.fraction[i],
+    num.threads     = 8,
+    verbose         = TRUE,
+    seed            = 123,
+    respect.unordered.factors = 'order',
+  )
+  # export OOB error 
+  hyper_grid$rmse[i] <- sqrt(fit$prediction.error)
+}
+
+# assess top 10 models
+hyper_grid %>%
+  arrange(rmse) %>%
+  mutate(perc_gain = (default_rmse - rmse) / default_rmse * 100) %>%
+  head(10)
+
+# Interpretation: the top 10 models have these features e.g., mtry = 2 (out of 45 predictors), 
+# node-size 5 (it splits until theres 5 observation in the terminal node)
+# replacement is better in half of the models here, as replace = FALSE for top 10 models (Replace = false = Replacement is best)
+# sample fraction is better if we only consider 80% of the original data, 
+# rmse perc_gain = percentage rmse minimized by using this model
+
+#Train the optimal model, changing values in accordance with the best model obtained from the top 10 above
+OptimalModel <- ranger(
+  formula = X0 ~.,
+  data = baked_train,
+  num.trees = 450,
+  mtry = 2,
+  min.node.size = 5,
+  replace = T,
+  sample.fraction = 0.8,
+  verbose = T,
+  seed = 123
+)
+
+
+#Making out of sample predictions
+p <- predict(OptimalModel, baked_test)
+pred <- p$predictions
+
+# rmse <- accuracy(pred, baked_test$X0) #stoppet med at virke efter første gang!? use caret package if problems. (giver det overhovedet mening at beregne RMSE for logistic problems?)
+# rmse #0.7375415 Mean Error
+
+# Feature Importance plot + comparison between impurity and permutation
+# re-run model with impurity-based variable importance
+rf_impurity <- ranger(
+  formula = X0 ~ ., 
+  data = baked_train, 
+  num.trees = 450,  # notice the model is re-run with the optimal hyperparam identified before
+  mtry = 2,
+  min.node.size =5,
+  sample.fraction = 0.8,
+  replace = T,
+  importance = "impurity",  # based on impurity (Impurity importance, also known as Gini importance, is the default importance measure used in random forests. The impurity-based importance assesses the predictive power of each predictor by measuring how much splitting on that predictor improves the overall purity or homogeneity of the resulting nodes.)
+  respect.unordered.factors = "order",
+  verbose = T,
+  seed  = 123
+)
+
+# re-run model with permutation-based variable importance
+rf_permutation <- ranger(
+  formula = X0 ~ ., 
+  data = baked_train, 
+  num.trees = 450,  # notice the model is re-run with the optimal hyperparam identified before
+  mtry = 2,
+  min.node.size = 5,
+  sample.fraction = 0.8,
+  replace = T,
+  importance = "permutation",  # based on permutation (It measures the decrease in model performance (e.g., accuracy or mean squared error) when the values of a predictor are randomly permuted while keeping other predictors unchanged)
+  respect.unordered.factors = "order",
+  verbose = T,
+  seed  = 123
+) 
+
+
+# Typically, you will not see the same variable importance order
+# between the two options; however, you will often see similar 
+# variables at the top of the plots (and also the bottom).
+# We use impurity, as it is the standard for RF models.
+
+p1 <- vip::vip(rf_impurity, num_features = 45, bar = FALSE)
+p2 <- vip::vip(rf_permutation, num_features = 45, bar = FALSE)
+
+gridExtra::grid.arrange(p1, p2, nrow = 1)
+
+# Confusion Matrix
+confusionMatrix(
+  pred, baked_test$X0, positive = "yes")
+
+#          Reference
+# Prediction  no yes
+#         no  199  66
+#        yes  12  24
+
+# Accuracy : 0.7409          
+# 95% CI : (0.6875, 0.7894)
+# No Information Rate : 0.701           
+# P-Value [Acc > NIR] : 0.07242         
+# Kappa : 0.2534 
+# Sensitivity : 0.26667         
+# Specificity : 0.94313         
+# Pos Pred Value : 0.66667
+
+# AUC
+#Cant with the Ranger model apparently - use carets train() on rf model if we want AUC and RMSE
+#E.g 
+#X0_rf.caret <- train(X0 ~ ., data = baked_train, method = "rf", ntree = 10, trControl = ctrl)
+```
+
+
+##LauB Gradient Boosting Model (GBM) 
+
+```{r}
+# Gradient boosting with caret
+# Set up the train control object
+ctrl <- trainControl(
+  method = "cv",       # Cross-validation method
+  number = 3,          # Number of folds
+  verboseIter = TRUE   # Print progress during training
+)
+
+# Train the gradient boosting model
+gbmfit <- train(
+  X0 ~ .,                    # Formula for the model
+  data = baked_train,        # Training data
+  method = "gbm",            # Gradient boosting method
+  trControl = ctrl,          # Train control object
+  verbose = FALSE            # Suppress verbose output
+)
+
+# Getting accuracy and kappa from the model trained using caret
+# Obtain predictions from the trained model
+gbm_pred <- predict(gbmfit, newdata = baked_test)
+
+# Create a confusion matrix
+confusion_mat <- confusionMatrix(gbm_pred, baked_test$X0)
+
+# Extract accuracy and kappa from the confusion matrix
+accuracy <- confusion_mat$overall["Accuracy"] #0.7441 
+kappa <- confusion_mat$overall["Kappa"] #0.2928
+
+#Calculate AUC
+
+# Load the pROC package
+#install.packages("pROC")
+library(pROC)
+
+#baked_train$X0 <- as.numeric(baked_train$X0)
+#baked_test$X0 <- as.numeric(baked_test$X0)
+#baked_train$X0 <- baked_train$X0 - 1 #subtracting 1 as R turns the 0/1 variable into a 1/2 variable when changing to numeric
+#baked_test$X0 <- baked_test$X0 - 1 #subtracting 1 as R turns the 0/1 variable into a 1/2 variable when changing to numeric
+
+
+# Obtain predicted probabilities from your gradient boosting model
+predicted_probs <- predict(gbmfit, newdata = baked_test, type = "prob")
+
+# Extract the predicted probabilities for the positive class
+positive_probs <- predicted_probs[, "yes"]
+
+# Create a binary outcome vector (1 for positive class, 0 for negative class)
+outcome <- ifelse(baked_test$X0 == "yes", 1, 0)
+
+# Calculate the ROC curve and AUC
+
+roc_obj <- roc(outcome, positive_probs)
+plot(roc_obj)
+colAUC(predicted_probs[ , 1], as.character(baked_test$X0), plotROC = T)
+#We get the probabilities from the first model we trained
+#auc_value <- auc(roc_obj) #0.7659
+#auc
+# Area Under the Curve is 76.59%
+# The ROC curve is a graphical representation of the models sensitivity and 1-specificity and to evaluate the performance of a model
+# predicting a binary variable we can evaluate the Area Under the Curve which represent a number between 0 and 1, where the closer to
+# 1 the better the performance of the model and an AUC of 0.5 is equal to a random guess.
+# Hence the AUC of almost 76% is considered a decent performance.
+
+# Confusion Matrix
+predicted_val <- predict(gbmfit, baked_test)
+confusionMatrix(
+  predicted_val, baked_test$X0, positive = "yes")
+
+#           Reference
+# Prediction  no yes
+#        no   194  60
+#       yes   17  30
+
+# Accuracy : 0.7442         
+# 95% CI : (0.691, 0.7925)
+# No Information Rate : 0.701          
+# P-Value [Acc > NIR] : 0.0562         
+
+# Kappa : 0.2929
+# Sensitivity : 0.33333        
+# Specificity : 0.91943
+
+#Discussion: 
+# The accuracy of the model is 74.42%, which means the model predicts the true positives or true negative correctly
+# 74.42% of the time. We can compare this to the NIR of 70%, which is the ratio of Yes and No in the testing data set.
+# This means that if we simply predicted "no" for all observations, we would still have an accuracy of 70%, why our goal is to
+# maximize the accuracy rate above the no information baseline. The model predicts slightly better with an accuracy of 74.42
+
+#The sensitivity (True Positive Rate) is an indication of how well the model is recalling the positive class "Yes" and is 33.33% which is a bad performance
+# of recalling the positive class.
+
+#The specificity is an indication of how well the model is predicting the negative class "No" and is 92%, which is a good performance
+# of predicting the negative class
+
+#The precision of the model (Pos Pred Value) is a value that represents the precision or the proportion of positive predictions that are 
+# actually true positives which is at 63.83% meaning that 57% of the time, the model correctly predicts a subscribed client.
+
+```
+
+##LauB Extreme Gradient Boosting (XGBoost) 
+
+```{r}
+set.seed(123)
+train.param <- trainControl(method = "cv", number = 3) 
+
+tune.grid.xgb <- expand.grid(nrounds=300, 
+                                 max_depth=c(3,6,9), 
+                                 gamma=c(0,1,5,10),
+                                 eta=c(0.01, 0.03, 0.1, 0.3),
+                                 subsample=0.5, 
+                                 colsample_bytree=0.1, 
+                                 min_child_weight = 1)
+
+xgbcaret <- train(X0 ~ ., baked_train,
+                     method = "xgbTree",
+                     tuneGrid = tune.grid.xgb,
+                     trControl = train.param)
+
+xgbcaret
+# eta   max_depth  gamma  Accuracy   Kappa    
+# 0.01  3           0     0.7468454  0.2734396
+# 0.01  3           1     0.7568598  0.2965317
+# 0.01  3           5     0.7568598  0.2917852
+# 0.01  3          10     0.7167284  0.1090324
+# 0.01  6           0     0.7511311  0.2825163
+# 0.01  6           1     0.7540047  0.2952909
+# 0.01  6           5     0.7525740  0.2730613
+# 0.01  6          10     0.7253061  0.1502354
+
+plot(xgbcaret)
+
+#Feature importance
+vip::vip(xgbcaret) 
+#Most important features (top 5) are X18, X13, X19, X20 and X16
+
+#Predicting
+# Obtain predicted probabilities from the XG boost model
+predicted_probsXG <- predict(xgbcaret, newdata = baked_test, type = "prob")
+
+# Extract the predicted probabilities for the positive class
+positive_probsXG <- predicted_probsXG[, "yes"]
+
+# Create a binary outcome vector (1 for positive class, 0 for negative class)
+outcomeXG <- ifelse(baked_test$X0 == "yes", 1, 0)
+
+# Calculate the ROC curve and AUC
+roc_objXG <- roc(outcomeXG, positive_probsXG)
+roc_objXG
+colAUC(predicted_probsXG[ , 1], as.character(baked_test$X0), plotROC = T) #0.7543
+# Area Under the Curve is 75.43%
+# The ROC curve is a graphical representation of the models sensitivity and 1-specificity and to evaluate the performance of a model
+# predicting a binary variable we can evaluate the Area Under the Curve which represent a number between 0 and 1, where the closer to
+# 1 the better the performance of the model and an AUC of 0.5 is equal to a random guess.
+# Hence the AUC of almost 76% is considered a decent performance.
+
+#RMSE (does not make sense to calculate on logistic?)
+rmse <- RMSE(positive_probsXG, outcomeXG) #0.4126
+1-rmse #0.5873
+
+# Confusion Matrix
+predicted_val <- predict(xgbcaret, baked_test)
+confusionMatrix(
+  predicted_val, baked_test$X0, positive = "yes")
+
+#           Reference
+#Prediction  no yes
+#       no  200  65
+#      yes  11  25
+
+# Accuracy : 0.7475          
+# 95% CI : (0.6945, 0.7956)
+# No Information Rate : 0.701           
+# P-Value [Acc > NIR] : 0.04296         
+# Kappa : 0.2725
+# Sensitivity : 0.27778         
+# Specificity : 0.94787         
+# Pos Pred Value : 0.69444
+
+#Discussion: 
+# The accuracy of the model is 74.75%, which means the model predicts the true positives or true negative correctly
+# 74.42% of the time. We can compare this to the NIR of 70%, which is the ratio of Yes and No in the testing data set.
+# This means that if we simply predicted "no" for all observations, we would still have an accuracy of 70%, why our goal is to
+# maximize the accuracy rate above the no information baseline. The model predicts slightly better with an accuracy of 74.42
+
+#The sensitivity (True Positive Rate) is an indication of how well the model is recalling the positive class "Yes" and is 27% which is a bad performance
+# of recalling the positive class.
+
+#The specificity is an indication of how well the model is predicting the negative class "No" and is 94%, which is a good performance
+# of predicting the negative class
+
+#The precision of the model (Pos Pred Value) is a value that represents the precision or the proportion of positive predictions that are 
+# actually true positives which is at 69% meaning that 69% of the time, the model correctly predicts a subscribed client.
+```
+
+
+
 
 #SVM HOM
 
@@ -900,65 +1310,94 @@ grid.arrange(grobs = pdps,  ncol = 2)
 ```
 
 
+#Moving Beyond Linearity
 
-#SVM Lau
+ - go to empNumeric for GAM logistic regression
 
-```{r SVM LauB}
-# SVMs
-ctrl_svm <- trainControl(
-  method = "cv", 
-  number = 10, 
-  classProbs = TRUE,             
-  summaryFunction = twoClassSummary  # also needed for AUC/ROC
-)
+##LauB GLM Generalized Linear Model
 
-# Tune an SVM
-set.seed(123)  
-svm_model <- train(
-  X0 ~ ., 
-  data = baked_train,
-  method = "svmRadial",               
-  metric = "ROC",  # explicitly set area under ROC curve as criteria        
-  trControl = ctrl_svm,
-  tuneLength = 10
-)
-
-confusionMatrix(svm_model)
-
-#             Reference
-# Prediction   no  yes
-#        no  65.6 19.8
-#        yes  4.5 10.2
-# Accuracy (average) : 0.7576
-
-# Feature importance 
-# Create a wrapper to retain the predicted class probabilities for the class of interest (in this case, Yes)
-prob_yes <- function(object, newdata) {
-  predict(object, newdata = newdata, type = "prob")[, "yes"]
-}
-#variable importance plot
-set.seed(123)  # for reproducibility
-vip(svm_model, method = "permute", nsim = 5, train = baked_train, 
-    target = "X0", metric = "auc", reference_class = "yes", 
-    pred_wrapper = prob_yes)
-
-# We find that the variables that has the most predictive ability on whether a client has subscribed a term deposit are:
-# X20 (Number of employees)
-# X13 (days since last contact to client)
-# X15 (Previous outcome of campaign = success)
-# X17 (Consumer Confidence Index)
-
-#construct PDP (feature effect plots are on the probability scale)
-features <- c("X20", "X13", 
-              "X15_success", "X18")
-pdps <- lapply(features, function(x) {
-  partial(svm_model, pred.var = x, which.class = 2,        # since the predicted probabilities from our model come in two columns (No and Yes), we specify which.class = 2 so that our interpretation is in reference to predicting Yes
-          prob = TRUE, plot = TRUE, plot.engine = "ggplot2") +
-    coord_flip()
-})
-grid.arrange(grobs = pdps,  ncol = 2)
-# interpretskrald
+```{r}
+dim(subtrain)
+dim(subtest)
+glimpse(subtrain)
 ```
+
+
+Define train CV
+```{r Define train CV}
+ctrl <- trainControl(method = "cv", number = 5, savePredictions = "final")
+```
+
+
+
+```{r Fit GLM }
+glm_model <- train(HighratingOverallBinary ~ ., data = subtrain, method = "glm", trControl = ctrl)
+```
+Function Call: Unfortunately, the function call details are marked as NULL, which typically indicates missing output or that the original call wasn't captured.
+MIGHT CONVERT INTO NUMERIC TO GET SOMETHING?
+```{r Summary GLM }
+summary(glm_model)
+```
+
+```{r predictions GLM}
+# Make predictions
+pred_glm <- predict(glm_model, newdata = subtest)
+
+# Evaluate the models' performance
+confusionMatrix(pred_glm, subtest$HighratingOverallBinary)
+```
+
+## HOM 7.6 MARS: Multivariate Additive Regression Spline
+
+The MARS method and algorithm can be extended to handle classification problems and GLMs in general.
+
+```{r datasplit}
+dim(subtrain)
+dim(subtest)
+glimpse(subtrain)
+```
+
+Creating hypergrid
+Tuning hyperparametrs:
+ - the maximum degree of interactions (degree)  
+ - the number of terms (i.e., hinge functions determined by the optimal number of knots across all features) (nprune)
+ - performing a grid search to identify the optimal combination of hyperparameters that minimize the cv prediction error
+```{r Hyper grid}
+hyper_grid <- expand.grid(
+  degree = 1:3, 
+  nprune = seq(2, 100, length.out = 10) %>% floor()
+)
+hyper_grid
+```
+
+
+
+```{r CV model}
+library(earth)
+# cross validated model
+tuned_mars <- train(
+  x = subset(subtrain, select = -ratingOverall),
+  y = subtrain$ratingOverall,
+  method = "earth",
+  trControl = trainControl(method = "cv", number = 10),
+  tuneGrid = hyper_grid
+)
+```
+
+```{r besttune MARS}
+tuned_mars$bestTune
+tuned_mars$results
+```
+
+```{r Plot CV on Degree//Terms}
+ggplot(tuned_mars)
+```
+The besttune and plot shows:
+Maximum degree of interactions (degree)
+- the maximum degree for optimizing accuracy is 3 degrees/interactions
+
+Number of terms (i.e., hinge functions determined by the optimal number of knots across all features) (nprune)
+- the number of terms optimizing the accuracy are 23
 
 
 
