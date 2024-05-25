@@ -1,0 +1,1843 @@
+
+##CH 8 SOLUTIONS
+
+EXE 7 RF - Boston - EGRESSION PROBLEM
+- In the lab, we applied random forests to the Boston data using mtry = 6 and using ntree = 25 and ntree = 500. Create a plot displaying the test error resulting from random forests on this data set for a more comprehensive range of values for mtry and ntree. You can model your plot after Figure 8.10. Describe the results obtained.
+
+EXE 8 Regression tree and bagging - REGRESSION PROBLEM
+- In the lab, a classification tree was applied to the Carseats data set after converting Sales into a qualitative response variable. Now we will seek to predict Sales using regression trees and related approaches, treating the response as a quantitative variable.
+- (a) Split the data set into a training set and a test set.
+- (b) Fit a regression tree to the training set. Plot the tree, and interpret the results. What test MSE do you obtain?
+- (c) Use cross-validation in order to determine the optimal level of tree complexity. Does pruning the tree improve the test MSE?
+- (d) Use the bagging approach in order to analyze this data. What test MSE do you obtain? Use the importance() function to determine which variables are most important.
+- (e) Use random forests to analyze this data. What test MSE do you obtain? Use the importance() function to determine which variables are most important. Describe the effect of m, the number of variables considered at each split, on the error rate obtained.
+- (f) Now analyze the data using BART, and report your results.
+
+EXE 9 - Classification tree - 1070 purchases where the customer either purchased Citrus Hill or Minute Maid Orange Juice. 
+This problem involves the OJ data set which is part of the ISLR2 package.
+- (a) Create a training set containing a random sample of 800 observations, and a test set containing the remaining observations.
+- (b) Fit a tree to the training data, with Purchase as the response and the other variables as predictors. Use the summary() function to produce summary statistics about the tree, and describe the results obtained. What is the training error rate? How many terminal nodes does the tree have?
+- (c) Type in the name of the tree object in order to get a detailed text output. Pick one of the terminal nodes, and interpret the information displayed.
+- (d) Create a plot of the tree, and interpret the results.
+- (e) Predict the response on the test data, and produce a confusion matrix comparing the test labels to the predicted test labels. What is the test error rate?
+- (f) Apply the cv.tree() function to the training set in order to determine the optimal tree size.
+- (g) Produce a plot with tree size on the x-axis and cross-validated classification error rate on the y-axis.
+- (h) Which tree size corresponds to the lowest cross-validated classification error rate?
+- (i) Produce a pruned tree corresponding to the optimal tree size obtained using cross-validation. If cross-validation does not lead to selection of a pruned tree, then create a pruned tree with five terminal nodes.
+- (j) Compare the training error rates between the pruned and unpruned trees. Which is higher?
+- (k) Compare the test error rates between the pruned and unpruned trees. Which is higher?
+
+EXE 10 - focus on Boosting (and comparison with linear regression, lasso and bagging) - think its numeric
+- We now use boosting to predict Salary in the Hitters data set.
+- (a) Remove the observations for whom the salary information is unknown, and then log-transform the salaries.
+- (b) Create a training set consisting of the first 200 observations, and a test set consisting of the remaining observations.
+- (c) Perform boosting on the training set with 1,000 trees for a range of values of the shrinkage parameter λ. Produce a plot with different shrinkage values on the x-axis and the corresponding training set MSE on the y-axis.
+- (d) Produce a plot with different shrinkage values on the x-axis and the corresponding test set MSE on the y-axis.
+- (e) Compare the test MSE of boosting to the test MSE that results from applying two of the regression approaches seen in Chapters 3 and 6.
+- (f) Which variables appear to be the most important predictors in the boosted model?
+- (g) Now apply bagging to the training set. What is the test set MSE for this approach?
+
+EXE 11 - focus on Boosting - Binary classification problem - 5822 real customer records, (Purchase) indicates whether the customer purchased a caravan insurance policy.
+- This question uses the Caravan data set.
+- (a) Create a training set consisting of the first 1,000 observations, and a test set consisting of the remaining observations.
+- (b) Fit a boosting model to the training set with Purchase as the response and the other variables as predictors. Use 1,000 trees, and a shrinkage value of 0.01. Which predictors appear to be the most important?
+
+
+```{r CH 8 SOLUTIONS}
+# *************************************************************************
+## Chapter 8 Solutions to Applied Ex.: TREES 
+# *************************************************************************
+library(ISLR) # containing some of the datasets
+
+# ********
+# EX 7 - Random forests
+# ********
+library(MASS) # containing Boston dataset
+library(randomForest)
+
+str(Boston)
+# Understand the data
+View(Boston) 
+# type Boston in the search area of Help to see the dataset description 
+# the DV is median value of owner-occupied homes in \$1000s
+dim(Boston)
+dim(Boston)[1]
+dim(Boston)[2]
+
+# We use an alternate call to randomForest() which uses X.train, X.test, Y.train and Y.test as matrices. 
+# This approach allows us to automatically compute test MSE as a function of number of trees
+# To do so, 
+
+# First, construct the train and test matrices. I randomly choose the half of the data
+set.seed(1101)
+train = sample(dim(Boston)[1], dim(Boston)[1]/2) 
+X.train = Boston[train, -14] # DV is medv (column 14)
+X.test = Boston[-train, -14]
+Y.train = Boston[train, 14]
+Y.test = Boston[-train, 14]
+
+# Setting the parameters for random forest: 
+  # ntree (B in the theory): I will try a range of ntree from 1 to 500. 
+  #  For mtry I take the three typical values:  
+  #    - p (this is a bagging model)
+  #    - p/2
+  #    - sqrt(p)
+
+p = dim(Boston)[2] - 1 # recall, p is number of IV 
+p.2 = p/2
+p.sq = sqrt(p)
+
+# Run the random forests models
+rf.boston.p = randomForest(X.train, Y.train, xtest = X.test, ytest = Y.test, 
+                           mtry = p, ntree = 500) # mtry = p is simply a bagging model
+rf.boston.p.2 = randomForest(X.train, Y.train,xtest = X.test, ytest = Y.test, 
+                             mtry = p.2, ntree = 500)
+rf.boston.p.sq = randomForest(X.train, Y.train,xtest = X.test, ytest = Y.test, 
+                              mtry = p.sq, ntree = 500)
+
+          # Extra discussion
+          rf.boston.p
+           # see output : 
+            # training MSE: 16.68 and 
+            # % Var Explained = 1 - RSS/TSS= 81.56
+            # for training random forest (a particular case of bagging) - 
+            #  also called "Out of the Bag error (OOB)"
+          
+            # MSE for test: 11.73
+            # and % var explained for test : 84.98
+          
+          rf.boston.p.2 
+          rf.boston.p.sq
+          
+          
+          # OOB error in bagging is the training error
+          plot(1:500, rf.boston.p$mse, col = "green", type = "l", xlab = "Number of Trees", 
+               ylab = "OOB-MSE", ylim = c(10, 25))
+          lines(1:500, rf.boston.p.2$mse, col = "red", type = "l")
+          lines(1:500, rf.boston.p.sq$mse, col = "blue", type = "l")
+          legend("topright", c("m=p", "m=p/2", "m=sqrt(p)"), col = c("green", "red", "blue"), 
+                 cex = 1, lty = 1)
+          library(Hmisc)
+          minor.tick(nx=10)
+          
+          # NOTES
+          ## OOB error is a good estimator for the testing error;
+          ## if ntree is sufficiently large, OOB error is virtually equivalent to leave-one-out cross validation error (ISL, p. 318)
+          ## we observe in the plot the trend of OOB-MSE is similar to the trend of test error (see plot below).
+          
+
+
+# Test MSE of these models can be obtained by accessing mse list member of the test model. 
+rf.boston.p$test$mse
+rf.boston.p.2$test$mse
+rf.boston.p.sq$test$mse
+
+# Plot the test error as a function of the number of trees used
+plot(1:500, rf.boston.p$test$mse, col = "green", type = "l", xlab = "Number of Trees", 
+     ylab = "Test MSE", ylim = c(10, 25))
+lines(1:500, rf.boston.p.2$test$mse, col = "red", type = "l")
+lines(1:500, rf.boston.p.sq$test$mse, col = "blue", type = "l")
+legend("topright", c("m=p", "m=p/2", "m=sqrt(p)"), col = c("green", "red", "blue"), 
+       cex = 1, lty = 1)
+library(Hmisc)
+minor.tick(nx=10)
+
+# Interpretation (valid for this split of the data - different output may be obtained if seed is not preserved): 
+# The plot shows that test MSE for single tree is quite high. 
+# It is reduced by adding more trees to the model and stabilizes around a few hundred trees. 
+# Test MSE for including all variables at split (bagging) is slightly higher than 
+# test MSE using half or square-root number of variables. 
+# Overall, for these data random forest perform better than bagging. 
+
+          # Other alternative: 
+          # Using caret library to tune "mtry" 
+          # PS: "ntree" is not tuned because it is not a critical parameter with bagging. 
+          #     one can set ntree big enough; using a very large value for ntree will not 
+          #     lead to overfitting (p. 317 ISL).
+
+          set.seed(123456)
+          library(caret)
+          train <- cbind(X.train, Y.train)
+          tune.grid <- data.frame(.mtry=c(1:13))
+          train.param <- trainControl(method="cv", number=5)
+          rf.boston <- train(Y.train ~., train, 
+                             method ="rf", 
+                             ntree=500, 
+                             trControl=train.param, 
+                             tuneGrid=tune.grid)
+          rf.boston
+          # CV-RMSE for mtry = 6 is the minimum
+          
+          # for updates in rf function
+          # rfNews()
+          
+          # test MSE 
+          test = Boston[-train,]
+          yhat.rf = predict(rf.boston,newdata=Boston[-train,])
+          mean((yhat.rf-test$medv)^2)
+          #[1] 9.45507
+     
+          # variable importance
+          vip::vip(rf.boston, num_features = 40, bar = FALSE)
+          
+          
+          # PDPs
+          # Construct partial dependence plots
+          p1 <- pdp::partial(
+            rf.boston, 
+            pred.var = "lstat",
+            grid.resolution = 20
+          ) %>% 
+            autoplot()
+          
+          p2 <- pdp::partial(
+            rf.boston, 
+            pred.var = "rm", 
+            grid.resolution = 20
+          ) %>% 
+            autoplot()
+          
+          gridExtra::grid.arrange(p1, p2, nrow = 1)
+          
+          
+          
+          
+         
+
+
+
+
+# ********
+# EX 8  - Regression tree and bagging
+# ********
+library(ISLR)
+attach(Carseats)
+View (Carseats)
+str(Carseats)
+
+# Understand the data: 
+# type Carseats in the search area of Help, to see the dataset description 
+
+#  A data frame with 400 observations on the following 11 variables.Variables are
+  # Sales: Unit sales (in thousands) at each location
+  # CompPrice: Price charged by competitor at each location
+  # Income: Community income level (in thousands of dollars)
+  # Advertising: Local advertising budget for company at each location (in thousands of dollars)
+  # Population: Population size in region (in thousands)
+  # Price: Price company charges for car seats at each site
+  # ShelveLoc (factor): A factor with levels Bad, Good and Medium indicating the quality of the shelving location for the car seats at each site
+  # Age: Average age of the local population
+  # Education: Education level at each location
+  # Urban (factor): A factor with levels No and Yes to indicate whether the store is in an urban or rural location
+  # US(factor): A factor with levels No and Yes to indicate whether the store is in the US or not
+
+# The units of observations (rows) are stores. 
+
+
+# a) Split the data randomly into train and test. Here I use 75% /25%
+
+set.seed(123)
+train = sample(dim(Carseats)[1], dim(Carseats)[1]*2/3)
+Carseats.train = Carseats[train, ]
+Carseats.test = Carseats[-train, ]
+
+
+# b) Fit a regression tree to predict the sales (continuous DV)
+
+library(tree)
+tree.carseats = tree(Sales ~ ., data = Carseats.train)
+tree.carseats
+summary(tree.carseats)
+# Notice in the summary output that variables actually used in tree construction
+# Note also that this (unpruned) tree has 19 terminal nodes
+
+
+
+# Now plot it
+plot(tree.carseats)
+text(tree.carseats, pretty = 0)
+
+# Using rpart library (better visualization)
+# library(rpart)
+# rt.carseats <- rpart(Sales ~ ., data = Carseats.train)
+# library(rpart.plot)
+# prp(rt.carseats, extra=101, box.col = "yellow", split.box.col ="grey")
+
+# Shelve location is the most important variable in determining the sales (number of sold units),
+# and stores with bad and medium shelve location sell less  units than stores with good shelve location.
+# Furthermore, Price and Age play a significant role in determining the sales. 
+# The tree predicts for example that stores with a good shelve location and a price for carseats less than 107.5 will sell on average 12.53 units (the highest). 
+
+
+pred.carseats = predict(tree.carseats, Carseats.test)
+mean((Carseats.test$Sales - pred.carseats)^2)
+## For this data, the test MSE is about 4.22
+
+
+
+# c).CV for choosing Tree Complexity (number of leaves)
+
+# # cv.tree() runs a K-fold cross-validation experiment to find the deviance or number of misclassifications 
+# as a function of the cost-complexity parameter k (alpha, in the textbook).
+
+set.seed(123)
+cv.carseats = cv.tree(tree.carseats, FUN = prune.tree) 
+par(mfrow = c(1, 2))
+plot(cv.carseats$size, cv.carseats$dev, type = "b") # we plot the MSE as a function of the number of leaves $size (number of terminal nodes, labelled, T, see p. 309 in textbook)
+
+library(Hmisc)
+minor.tick(nx=5)
+min(cv.carseats$dev)
+# The minimum cv error is obtained for the size=9
+# Alpha parameter can also be seen in 
+  cv.carseats$k 
+# We can now prune the original tree: 
+
+# Best size = 9
+pruned.carseats = prune.tree(tree.carseats, best = 9)
+par(mfrow = c(1, 1))
+plot(pruned.carseats)
+text(pruned.carseats, pretty = 0)
+
+# Now use the pruned tree to make prediction on the (correction) test set
+pred.pruned = predict(pruned.carseats, Carseats.test)
+mean((Carseats.test$Sales - pred.pruned)^2)
+# Pruning the tree decreases the test MSE to 4.47 (an inprovement in comparison with the unpruned tree).
+
+# Now we can interpret the pruned tree. 
+
+
+
+# d) Bagging
+
+library(randomForest)
+set.seed(123)
+bag.carseats = randomForest(Sales ~ ., data = Carseats.train, mtry = 10, ntree = 500, importance = T) # notice mtry = p
+
+bag.pred = predict(bag.carseats, Carseats.test)
+mean((Carseats.test$Sales - bag.pred)^2)  # Bagging improves the test MSE to approx 2.5
+# The relative importance of the variables: 
+importance(bag.carseats)
+# We see that Price, ShelveLoc, CompPrice, Adv 
+# and Age are the most important variables to predict sales �𝚎
+varImpPlot(bag.carseats)
+
+
+# e.) Random forests
+
+library(randomForest)
+set.seed(123)
+rf.carseats = randomForest(Sales ~ ., data = Carseats.train, mtry = 5, ntree = 500, importance = T) 
+## notice mtry = < p; 
+## Changing mtry (m) that is, the number of variables considered at each split,varies test MSE. 
+
+rf.pred = predict(rf.carseats, Carseats.test)
+mean((Carseats.test$Sales - rf.pred)^2) # Random forest improves even more the MSE on test set to 2.28
+importance(rf.carseats)
+# We see again the most important variables to predict sales
+varImpPlot(rf.carseats)
+
+
+
+
+
+# ********
+# EX 9 - Classification tree
+# ********
+library(ISLR)
+attach(OJ)
+View(OJ)
+
+# Understand the data: 
+# The data contains 1070 purchases where the customer either purchased Citrus Hill or Minute Maid Orange Juice. 
+# A number of characteristics of the customer and product are recorded.
+# Type OJ in the search area of Help to see the full dataset description. 
+# The units of observations (rows) are customers.
+
+# a) Create the datasets
+set.seed(1013)
+train = sample(dim(OJ)[1], 800)
+OJ.train = OJ[train, ]
+OJ.test = OJ[-train, ]
+
+# b) Fit a tree Purchase ~ .; Notice, since Purchase is binary, we fit a classification tree. 
+library(tree)
+oj.tree = tree(Purchase ~ ., data = OJ.train)
+summary(oj.tree)
+# Notice in the output: The tree only uses two variables: LoyalCH and PriceDiff.
+# It has 7 terminal nodes. Training error rate (misclassification error) for the tree is 0.155
+
+
+
+# c) Type the name of the object and see output
+oj.tree
+# Let's pick terminal node labeled “10)”
+   # - The splitting variable at this node is PriceDiff
+   # - The splitting value of this node is 0.065. 
+   # - There are 79 points in the subtree below this node. 
+   # -The deviance for all points contained in region below this node is 76.79. 
+   # - A star (*) in the line denotes that this is in fact a terminal node. 
+   # - The prediction at this node is Sales=MM. About 19% points in this node have CH as value of Sales.
+   #   Remaining 81% points have MM as value of Sales. 
+
+
+# d) Plot and interpret
+plot(oj.tree)
+text(oj.tree, pretty = 0)
+# LoyalCH is the most important variable of the tree, in fact top 3 nodes contain LoyalCH.
+# If LoyalCH < 0.27, the tree predicts MM. If LoyalCH > 0.76, the tree predict CH. 
+# For intermediate values of LoyalCH, the decision also depends on the value of PriceDiff.
+
+
+# e) Predict and build a confusion matrix
+oj.pred = predict(oj.tree, OJ.test, type = "class")
+table(OJ.test$Purchase, oj.pred)
+testerror = (19+32)/(152+19+32+67)
+testerror
+
+# f) Apply cv to determine the optimal tree size
+cv.oj = cv.tree(oj.tree, FUN = prune.tree)
+
+# g) Plot cv-error
+plot(cv.oj$size, cv.oj$dev, type = "b", xlab = "Tree Size", ylab = "Deviance")
+
+# h) Size of 6 gives lowest cross-validation error
+
+# i) Produce the pruned tree
+oj.pruned = prune.tree(oj.tree, best = 6)
+plot(oj.pruned)
+text(oj.pruned, pretty = 0)
+
+
+# j) Compare training MSE
+summary(oj.pruned) # check the training error rate
+# Misclassification error of pruned tree is exactly same as that of original tree i.e. 0.155
+
+# k) Compare testing MSE
+pred.unpruned = predict(oj.tree, OJ.test, type = "class")
+table(OJ.test$Purchase, pred.unpruned)
+testMSEu= (32+19)/(152+19+32+67)
+
+# or 
+# misclass.unpruned = sum(OJ.test$Purchase != pred.unpruned)
+# misclass.unpruned/length(pred.unpruned)
+
+pred.pruned = predict(oj.pruned, OJ.test, type = "class")
+table(OJ.test$Purchase, pred.pruned)
+testMSEp= (32+19)/(152+19+32+67)
+
+# Concl: Pruned and unpruned trees have same test error rate of 0.189
+
+
+
+
+# ********
+# EX 10 - focus on Boosting (and comparison with linear regression, lasso and bagging)
+# ********
+# Understand the dataset: Hitters 
+# Objective: to predict salary (continuous)
+
+
+# a.) Delete missings and log transform
+
+library(ISLR)
+sum(is.na(Hitters$Salary))
+Hitters = na.omit(Hitters)
+sum(is.na(Hitters$Salary))
+
+Hitters$Salary = log(Hitters$Salary)
+
+# b.)
+
+train = 1:200
+Hitters.train = Hitters[train, ]
+Hitters.test = Hitters[-train, ]
+
+# c.)
+
+library(gbm)
+
+set.seed(103)
+
+pows = seq(-10, -0.2, by = 0.1)
+lambdas = 10^pows
+
+length.lambdas = length(lambdas)
+train.errors = rep(NA, length.lambdas)
+test.errors = rep(NA, length.lambdas)
+
+for (i in 1:length.lambdas) {
+  boost.hitters = gbm(Salary ~ ., data = Hitters.train, distribution = "gaussian", 
+                      n.trees = 1000, shrinkage = lambdas[i])
+  train.pred = predict(boost.hitters, Hitters.train, n.trees = 1000)
+  test.pred = predict(boost.hitters, Hitters.test, n.trees = 1000)
+  train.errors[i] = mean((Hitters.train$Salary - train.pred)^2)
+  test.errors[i] = mean((Hitters.test$Salary - test.pred)^2)
+}
+
+plot(lambdas, train.errors, type = "b", xlab = "Shrinkage", ylab = "Train MSE", 
+     col = "blue", pch = 20)
+
+
+# d)
+
+plot(lambdas, test.errors, type = "b", xlab = "Shrinkage", ylab = "Test MSE", 
+     col = "red", pch = 20)
+
+min(test.errors) 
+## [1] 0.2560
+
+lambdas[which.min(test.errors)] 
+## [1] 0.05012. Minimum test error is obtained at λ=0.05
+
+
+
+                 # Extra code using caret library to tune the parameters
+                  # for boosting, we have 3-4 main parameters:
+                  # n.trees, B
+                  # shrinkage, lambda
+                  # interaction.depth, d
+                  # + n.minobsinnode (Min Teminal Node Size)
+
+                  set.seed(123)
+                  library(caret)
+                  train.param <- trainControl(method = "cv", number=5)
+                  tune.grid <- expand.grid(n.trees = (0:50)*50, interaction.depth = c(1, 3, 5), shrinkage = lambdas, n.minobsinnode=10)
+                  
+                  
+                  boost.hitters.caret <- train(Salary ~., data = Hitters.train, 
+                                                method = "gbm", 
+                                                trControl=train.param,
+                                                tuneGrid=tune.grid)
+                  
+                  boost.hitters
+                  
+                  
+                  test.pred = predict(boost.hitters.caret, Hitters.test, n.trees = # ) # requires to be defined based on the model above 
+                  testMSE = mean(Hitters.test$Salary - test.pred)^2)
+                  testMSE
+
+
+# e) 
+
+# Applying linear regression
+lm.fit = lm(Salary ~ ., data = Hitters.train)
+lm.pred = predict(lm.fit, Hitters.test)
+mean((Hitters.test$Salary - lm.pred)^2)
+## [1] 0.4918
+
+
+# Applying lasso
+library(glmnet)
+set.seed(134)
+x = model.matrix(Salary ~ ., data = Hitters.train)
+y = Hitters.train$Salary
+x.test = model.matrix(Salary ~ ., data = Hitters.test)
+lasso.fit = glmnet(x, y, alpha = 1)
+lasso.pred = predict(lasso.fit, s = 0.01, newx = x.test)
+mean((Hitters.test$Salary - lasso.pred)^2)
+## [1] 0.4701
+
+# Concl: Both linear model and regularization like Lasso have higher test MSE than boosting.
+
+
+# f) 
+
+boost.best = gbm(Salary ~ ., data = Hitters.train, distribution = "gaussian", 
+                 n.trees = 1000, shrinkage = lambdas[which.min(test.errors)])
+summary(boost.best)
+# Concl: CAtBat, CRBI and CWalks are the three most important variables. 
+
+
+# g) bagging  + and test MSE
+
+library(randomForest)
+set.seed(21)
+rf.hitters = randomForest(Salary ~ ., data = Hitters.train, ntree = 1000, mtry = 19) # note mtry for bagging
+rf.pred = predict(rf.hitters, Hitters.test)
+mean((Hitters.test$Salary - rf.pred)^2)
+# Test MSE for bagging is about 0.23, which is slightly lower than the best test MSE for boosting.
+
+
+
+
+
+
+
+
+
+
+# ********
+# EX 11 - focus on Boosting, but DV is binary
+# ********
+
+# Understand the data set: Caravan (continous variable)
+# The data contains 5822 real customer records. Each record consists of 86 variables, containing sociodemographic data (variables 1-43) 
+# and product ownership (variables 44-86). The sociodemographic data is derived from zip codes. 
+# All customers living in areas with the same zip code have the same sociodemographic attributes. 
+# Variable 86 (Purchase) indicates whether the customer purchased a caravan insurance policy.
+# type Caravan in the search area of Help to see full description. 
+library(ISLR)
+
+View(Caravan)
+table(Caravan$Purchase)
+
+library(dplyr)
+glimpse(Caravan)
+
+# a)
+
+library(ISLR)
+train = 1:1000
+Caravan$Purchase = ifelse(Caravan$Purchase == "Yes", 1, 0) # recode classes as 1 and 0; where 1 = customer purchased a caravan insurance policy; 0=otherwise
+Caravan.train = Caravan[train, ]
+Caravan.test = Caravan[-train, ]
+
+# b)
+install.packages("gbm")
+library(gbm)
+set.seed(342)
+boost.caravan = gbm(Purchase ~ ., data = Caravan.train, n.trees = 1000, shrinkage = 0.01, 
+                    distribution = "bernoulli")
+summary(boost.caravan)
+
+# Concl: PPERSAUT, MKOOP KLA and MOPLHOOG 
+# (that is,Contribution car policies, Purchasing power class, High level education) 
+# are three most important variables
+
+
+summary(Caravan.train$PPERSAUT)
+summary(Caravan.train$MKOOPKLA)
+summary(Caravan.train$MOPLHOOG)
+
+plot(boost.caravan, i="PPERSAUT")
+plot(boost.caravan, i="MKOOPKLA")
+plot(boost.caravan, i="MOPLHOOG")
+
+
+
+# c)
+
+boost.prob = predict(boost.caravan, Caravan.test, n.trees = 1000, type = "response") # note we use type="response" to retain probabilities ; also, we need to mention again "n.trees = 1000". 
+boost.pred = ifelse(boost.prob > 0.2, 1, 0)
+table(Caravan.test$Purchase, boost.pred)
+
+ 34/(137 + 34) 
+## Precision (TP/P*) is 0.1988. Thus, about 20% of people predicted to make purchase actually end up making one.
+
+ 
+# Logistic regression 
+lm.caravan = glm(Purchase ~ ., data = Caravan.train, family = binomial)
+lm.prob = predict(lm.caravan, Caravan.test, type = "response")
+lm.pred = ifelse(lm.prob > 0.2, 1, 0)
+table(Caravan.test$Purchase, lm.pred)
+
+58/(350 + 58)
+## [1] 0.1422. 
+## About 14 % of people predicted to make purchase using logistic 
+## regression actually end up making one. 
+# The precision is lower than for boosting.
+
+# Note: In applications one can use other popular performance measures (AUC,recall, ...) 
+# as discussed in the first part of the curriculum (ISL p. 147-149). 
+```
+
+
+
+##Ch 8_Lab Rcode
+
+```{r Ch 8_Lab Rcode }
+# *************************************************************************
+# Chapter 8 Lab: Trees - with discussions
+# *************************************************************************
+
+
+# *************************************************************************
+# 8.3.1. Fitting Classification Trees
+# *************************************************************************
+library(tree)
+library(ISLR)
+attach(Carseats)
+
+# recode sales as a binary var and incorporate to the dataset
+High=ifelse(Carseats$Sales<=8,"0","1")
+Carseats=data.frame(Carseats,High)
+str(Carseats)
+Carseats$High = as.factor(Carseats$High)
+
+
+# set a classsification tree
+tree.carseats = tree(High ~ .-Sales,Carseats, split = c("deviance", "gini"))
+summary(tree.carseats)
+
+
+# plot tree, disply labels (text) and category names (pretty)
+plot(tree.carseats)
+text(tree.carseats,pretty=0)
+
+# read the tree
+tree.carseats
+
+# estimate the test error 
+RNGkind("L'Ecuyer-CMRG")
+set.seed(2)
+train=sample(1:nrow(Carseats), 200)
+Carseats.test=Carseats[-train,]
+High.test=High[-train]
+tree.carseats=tree(High~.-Sales,Carseats,subset=train)
+tree.pred=predict(tree.carseats,Carseats.test,type="class")
+table(tree.pred,High.test)
+# accuraccy: (87+56)/200 = 0.71; test error = 0.29
+# it you get slightly different results, it is because of the split
+
+# pruning the tree
+RNGkind("L'Ecuyer-CMRG")
+set.seed(3)
+cv.carseats=cv.tree(tree.carseats,FUN=prune.misclass) # FUN: classsification error rate guides the cross-validation and pruning process; default: deviance 
+names(cv.carseats)
+cv.carseats
+# in the output, despite the name, $dev is the cross-validation error rate
+# size = numer of terminal nodes of each tree considered
+# $k = cost-complexity parameter (alpha in the slides)
+
+par(mfrow=c(1,2))
+plot(cv.carseats$size,cv.carseats$dev,type="b")
+plot(cv.carseats$k,cv.carseats$dev,type="b")
+# the trees with 19 terminal nodes results in the lowest cross-validation error rate.
+# this is the most complex model;  
+# as an example, if we wish to prune the tree 
+# let us select best = 13 
+
+# plot pruned tree
+prune.carseats=prune.misclass(tree.carseats,best=13)
+plot(prune.carseats)
+text(prune.carseats,pretty=0)
+
+# estimate test error 
+tree.pred=predict(prune.carseats,Carseats.test,type="class")
+table(tree.pred,High.test)
+# accuracy: (78+62)/200 =0.7; test error rate = 0.3
+# here, pruning did not improve the accuracy.
+
+# ps. our solution is not the same as in the textbook because of the random split.
+# the instability of tree solutions when working with small datasets is acknowledged.
+
+
+
+
+
+
+# *************************************************************************
+# 8.3.2. Fitting Regression Trees
+# *************************************************************************
+library(MASS)
+RNGkind("L'Ecuyer-CMRG")
+set.seed(1)
+train = sample(1:nrow(Boston), nrow(Boston)/2)
+tree.boston=tree(medv~.,Boston,subset=train)
+summary(tree.boston)
+
+par(mfrow=c(1,1))
+plot(tree.boston)
+text(tree.boston,pretty=0)
+# most expensive houses are asssociated with 
+# larger homes (rm > 7.45), for which the tree predicts 
+# a median house price of 45.38
+
+# or smaller houses (rm<5.49) but for which the weighted 
+# mean of distances to five Boston employment centres (dis)
+# is short (dis<3.25); in this case
+# the tree predicts a median house price of 43.28 
+
+
+# cv.tree to see if pruning the tree is better
+cv.boston=cv.tree(tree.boston)
+plot(cv.boston$size,cv.boston$dev,type='b')
+# in this case 9 terminal nodes returns the smallest error; 
+# this is the most complex model meaning that pruning the tree 
+# if not useful in this case; 
+# if pruning is required, as an example, let us choose best = 5
+prune.boston=prune.tree(tree.boston,best=5)
+plot(prune.boston)
+text(prune.boston,pretty=0)
+
+
+# test error
+yhat=predict(tree.boston,newdata=Boston[-train,])
+boston.test=Boston[-train,"medv"]
+plot(yhat,boston.test)
+abline(0,1)
+mean((yhat-boston.test)^2) 
+# [1] 24.59711 ~ 25.000  (=MSE)
+# meaning that the model leads to test predictions that are within around 
+# 5000 (sqrt(MSE)) of the true median home value for the suburb
+
+
+
+
+# *************************************************************************
+# 8.3.3. Bagging and Random Forests (same library and function)
+# *************************************************************************
+# Bagging
+library(randomForest)
+RNGkind("L'Ecuyer-CMRG")
+set.seed(1)
+bag.boston=randomForest(medv~.,data=Boston,subset=train,mtry=13,importance=TRUE)
+bag.boston
+yhat.bag = predict(bag.boston,newdata=Boston[-train,])
+plot(yhat.bag, boston.test)
+abline(0,1)
+mean((yhat.bag-boston.test)^2)
+# test MSE for bagging is around 16.37 (significantly lower than that for regression tree)
+
+# increasing the number of trees grown ntree=1000
+bag.boston=randomForest(medv~.,data=Boston,subset=train,mtry=13,ntree=1000)
+yhat.bag = predict(bag.boston,newdata=Boston[-train,])
+mean((yhat.bag-boston.test)^2)
+# [1] 16.06824
+
+
+# Random forest (mtry argument)
+RNGkind("L'Ecuyer-CMRG")
+set.seed(1)
+rf.boston=randomForest(medv~.,data=Boston,subset=train,mtry=6,importance=TRUE)
+yhat.rf = predict(rf.boston,newdata=Boston[-train,])
+mean((yhat.rf-boston.test)^2)
+# [1] 15.53946
+# RF yielded an improvement over bagging
+importance(rf.boston)
+varImpPlot(rf.boston)
+# Concl. across all the trees considered by the random forest, 
+# the wealth level of community and the house size (rm)
+# are far the two most important variables. 
+
+
+
+
+# *************************************************************************
+# 8.3.4 Boosting 
+# *************************************************************************
+library(gbm)
+set.seed(1)
+boost.boston=gbm(medv~.,data=Boston[train,],distribution="gaussian",n.trees=5000,interaction.depth=4)
+summary(boost.boston)
+
+par(mfrow=c(1,2))
+plot(boost.boston,i="rm")
+plot(boost.boston,i="lstat")
+
+
+yhat.boost=predict(boost.boston,newdata=Boston[-train,],n.trees=5000)
+mean((yhat.boost-boston.test)^2)
+# [1] 15.83297 (MSE) similar to Rf
+
+boost.boston=gbm(medv~.,data=Boston[train,],distribution="gaussian",n.trees=5000,interaction.depth=4,shrinkage=0.2,verbose=F)
+yhat.boost=predict(boost.boston,newdata=Boston[-train,],n.trees=5000)
+mean((yhat.boost-boston.test)^2)
+# [1] 19.15354 (MSE) 
+# changing the shrinkage parameter does not imporve the fit in this case. 
+# creating a grid of values for this parameter and testing those values may help to 
+# identify the best fit. 
+
+# Next, see file XGBoost.R
+```
+
+##HOM Decision Trees
+
+```{r HOM Decision Trees }
+##############################################################
+# Decision Trees
+# Ch.9, HOM with R
+# Adv: simple and transparent 
+# Disadv: unstable
+##############################################################
+# Data: Ames 
+# DV: Sale_Price (i.e., $195,000, $215,000)
+# Features: 80
+# Observations: 2,930
+# Objective: use property attributes to predict the sale price of a house
+# Access: provided by the AmesHousing package (Kuhn 2017a)
+# more details: See ?AmesHousing::ames_raw
+
+# Helper packages
+library(dplyr)       # for data wrangling
+library(ggplot2)     # for awesome plotting
+library(rsample)     # for sample split
+
+# Modeling packages
+library(rpart)       # direct engine for decision tree application
+library(caret)       # meta engine for decision tree application
+
+# Model interpretability packages
+library(rpart.plot)  # for plotting decision trees
+library(rattle)      # for plotting decision trees
+library(vip)         # for feature importance
+library(pdp)         # for feature effects
+
+
+ames <- AmesHousing::make_ames()
+set.seed(123)
+split <- initial_split(ames, prop = 0.7, 
+                       strata = "Sale_Price")
+ames_train  <- training(split)
+ames_test   <- testing(split)
+
+
+# model
+ames_dt1 <- rpart(
+  formula = Sale_Price ~ .,
+  data    = ames_train,
+  method  = "anova" 
+)
+ames_dt1
+
+#plot tree
+rpart.plot(ames_dt1)
+
+# var imp
+par(mar=c(8,4,3,2))
+d <- as.data.frame(ames_dt1$variable.importance)
+
+#plot cp
+plotcp(ames_dt1) 
+
+#rpart cross validation results
+ames_dt1$cptable
+
+# for demo see if cp=0
+ames_dt2 <- rpart(
+  formula = Sale_Price ~ .,
+  data    = ames_train,
+  method  = "anova", 
+  control = list(cp = 0, xval = 10)
+)
+plotcp(ames_dt2)
+abline(v = 11, lty = "dashed")
+
+
+
+# ***
+
+# Alternative with caret 
+# a) "method = rpart" implies cp-based pruning
+ames_dt3 <- train(
+  Sale_Price ~ .,
+  data = ames_train,
+  method = "rpart",
+  metric = "RMSE",
+  trControl = trainControl(method = "cv", number = 10),
+  tuneLength = 20 
+)
+ames_dt3
+ggplot(ames_dt3)
+ames_dt3$bestTune
+
+
+#plot tree
+ames_dt3$finalModel
+fancyRpartPlot(ames_dt3$finalModel, sub = NULL)
+
+
+# vip
+vip(ames_dt3, num_features = 40, bar = FALSE)
+
+# Construct partial dependence plots
+p1 <- partial(ames_dt3, pred.var = "Gr_Liv_Area") %>% autoplot()
+p2 <- partial(ames_dt3, pred.var = "Year_Built") %>% autoplot()
+p3 <- partial(ames_dt3, pred.var = c("Gr_Liv_Area", "Year_Built")) %>% 
+  plotPartial(levelplot = FALSE, zlab = "yhat", drape = TRUE, colorkey = TRUE, 
+              screen = list(z = -20, x = -60))
+# Display plots side by side
+gridExtra::grid.arrange(p1, p2, p3, ncol = 3)
+# notice decision trees have rigid non-smooth prediction surfaces compared to MARS
+
+
+
+# b) "method = rpart2", max tree depth tuning 
+ames_dt4 <- train(
+  Sale_Price ~ .,
+  data = ames_train,
+  method = "rpart2",
+  metric = "RMSE",
+  trControl = trainControl(method = "cv", number = 10),
+  tuneLength = 20 
+)
+ames_dt4
+ggplot(ames_dt4)
+ames_dt4$bestTune
+
+ames_dt4$finalModel
+fancyRpartPlot(ames_dt4$finalModel, sub = NULL)
+
+
+# Evaluate test RMSE for dt1, dt3 and dt4
+#rpart library with rpart function, cp-based pruning
+dt1_pred = predict(ames_dt1, ames_test)
+dt1_RMSE = sqrt(mean((ames_test$Sale_Price - dt1_pred)^2))
+dt1_RMSE
+
+# caret with "method = rpart", cp-based pruning
+dt3_pred = predict(ames_dt3, ames_test)
+dt3_RMSE = sqrt(mean((ames_test$Sale_Price - dt3_pred)^2))
+dt3_RMSE
+
+# caret with "method = rpart2",max tree depth tuning 
+dt4_pred = predict(ames_dt4, ames_test)
+dt4_RMSE = sqrt(mean((ames_test$Sale_Price - dt4_pred)^2))
+dt4_RMSE
+
+# cp-based pruning is best
+```
+
+
+##HOM Bagging 
+```{r HOM Bagging  }
+##############################################################
+# Bagging (Bootstrap aggregating)
+# Ch.10, HOM with R
+# Adv: improve the stability and accuracy of trees
+# Adv.: works well with high-variance base learners
+# Disadv.: tree correlation 
+##############################################################
+# Data: Ames 
+# DV: Sale_Price (i.e., $195,000, $215,000)
+# Features: 80
+# Observations: 2,930
+# Objective: use property attributes to predict the sale price of a house
+# Access: provided by the AmesHousing package (Kuhn 2017a)
+# more details: See ?AmesHousing::ames_raw
+
+
+# Helper packages
+library(dplyr)       # for data wrangling
+library(ggplot2)     # for awesome plotting
+library(doParallel)  # for parallel backend to foreach (to speed computation)
+library(foreach)     # for parallel processing with for loops
+library(rsample)     # for sample split
+
+
+# Modeling packages
+library(caret)       # for general model fitting
+library(rpart)       # for fitting decision trees
+library(ipred)       # for fitting bagged decision trees
+library(randomForest)# for fitting bagged decision trees
+
+
+
+
+set.seed(123)
+
+ames <- AmesHousing::make_ames()
+set.seed(123)
+split <- initial_split(ames, prop = 0.7, 
+                       strata = "Sale_Price")
+ames_train  <- training(split)
+ames_test   <- testing(split)
+
+
+
+# train bagged model (here with ipred library::bagging)
+ames_bag1 <- bagging(
+  formula = Sale_Price ~ .,
+  data = ames_train,
+  nbagg = 100,  # trial with 100 bags
+  coob = TRUE,
+  control = rpart.control(minsplit = 2, cp = 0) # notice here
+)
+
+ames_bag1
+# OOB RMSE = 28029.47 
+
+ames_bag1 <- bagging(
+  formula = Sale_Price ~ .,
+  data = ames_train,
+  nbagg = 150,  # trial with 150 bags
+  coob = TRUE,
+  control = rpart.control(minsplit = 2, cp = 0)
+)
+
+ames_bag1
+# OOB RMSE = 27977.04
+
+
+
+ames_bag1 <- bagging(
+  formula = Sale_Price ~ .,
+  data = ames_train,
+  nbagg = 300,  # trial with 300 bags
+  coob = TRUE,
+  control = rpart.control(minsplit = 2, cp = 0)
+)
+
+ames_bag1
+# OOB RMSE = 27664.28 
+
+# Concl.: for this ames data,
+# the error is stabilizing with just over 100 trees, 
+# so we’ll likely not gain much improvement by simply bagging more trees.
+# Also notice that by comparing the RMSE for the best individual pruned
+# decision tree model (previous lecture) with the bagging models (this lecture), 
+# the error has decreased significantly from around 40.000 to around 27.000. 
+
+
+# train bagged model (here with caret library) 
+# NOTE: run this at home; it takes 30 min to converge!
+ames_bag2 <- train(
+  Sale_Price ~ .,
+  data = ames_train,
+  method = "treebag",
+  trControl = trainControl(method = "cv", number = 10), # 10-fold CV increases the convergence time
+  nbagg = 200,  
+  control = rpart.control(minsplit = 2, cp = 0)
+)
+ames_bag2
+
+#importance
+vip::vip(ames_bag2, num_features = 40, bar = FALSE)
+
+# PDPs
+# Construct partial dependence plots
+p1 <- pdp::partial(
+  ames_bag2, 
+  pred.var = "Lot_Area",
+  grid.resolution = 20
+) %>% 
+  autoplot()
+
+p2 <- pdp::partial(
+  ames_bag2, 
+  pred.var = "Lot_Frontage", 
+  grid.resolution = 20
+) %>% 
+  autoplot()
+
+gridExtra::grid.arrange(p1, p2, nrow = 1)
+
+
+# Easily parallelize to speed computation (requires library(doParallel))
+# Create a parallel socket cluster
+   # A parallel socket cluster in R refers to a group of computing nodes 
+   # connected by a network that work together to perform a computational 
+   # task. The term "parallel" indicates that the task is split across 
+   # multiple nodes to speed up processing, while "socket" refers to the 
+   # networking interface used for communication. In R, the doParallel 
+   # package provides functions for parallel processing on a single machine 
+   # or in a cluster, allowing for faster completion of large and complex 
+   # tasks.
+
+cl <- makeCluster(8) # use 8 workers
+registerDoParallel(cl) # register the parallel backend
+
+# Fit trees in parallel and compute predictions on the test set
+predictions <- foreach(
+  icount(160), 
+  .packages = "rpart", 
+  .combine = cbind
+) %dopar% {
+  # bootstrap copy of training data
+  index <- sample(nrow(ames_train), replace = TRUE)
+  ames_train_boot <- ames_train[index, ]  
+  
+  # fit tree to bootstrap copy
+  bagged_tree <- rpart(
+    Sale_Price ~ ., 
+    control = rpart.control(minsplit = 2, cp = 0),
+    data = ames_train_boot
+  ) 
+  
+  predict(bagged_tree, newdata = ames_test)
+}
+
+predictions[1:5, 1:7]  # OOB RMSE
+dim(predictions)
+
+# Plot error curve for custom parallel bagging of 1-160 deep,
+# unpruned decision trees.
+predictions %>%
+  as.data.frame() %>%
+  mutate(
+    observation = 1:n(),
+    actual = ames_test$Sale_Price) %>%
+  tidyr::gather(tree, predicted, -c(observation, actual)) %>%
+  group_by(observation) %>%
+  mutate(tree = stringr::str_extract(tree, '\\d+') %>% as.numeric()) %>%
+  ungroup() %>%
+  arrange(observation, tree) %>%
+  group_by(observation) %>%
+  mutate(avg_prediction = cummean(predicted)) %>%
+  group_by(tree) %>%
+  summarize(RMSE = RMSE(avg_prediction, actual)) %>%
+  ggplot(aes(tree, RMSE)) +
+  geom_line() +
+  xlab('Number of trees')
+
+# Shutdown parallel cluster
+stopCluster(cl)
+
+# Limitation of bagging trees 
+# the trees in bagging are not completely independent of each 
+# other since all the original features are considered at every 
+# split of every tree; that is, if one or two feature dominates, 
+# all tress will have that feature so the will be a similar structure 
+# especially at the top of the tree. To avoid this limitation,
+# random forest extend and improve upon bagged decision trees.
+
+
+# Task: Consider the randomForest library from the textbook ISL. 
+#       Implement a bagging model using the ames data and compare
+#       the results. 
+```
+
+
+#HOM Boosting
+```{r HOM Boosting }
+##############################################################
+# Gradient Boosting and Extreme Gradient Boosting (XGB)
+# Ch.12, HOM with R
+# Adv.: the most competitive ensemble of trees alg.
+# Disadv: tuning require much more strategy than a random forest 
+##############################################################
+# Data: Ames 
+# DV: Sale_Price (i.e., $195,000, $215,000)
+# Features: 80
+# Observations: 2,930
+# Objective: use property attributes to predict the sale price of a house
+# Access: provided by the AmesHousing package (Kuhn 2017a)
+# more details: See ?AmesHousing::ames_raw
+
+
+# Helper packages
+library(dplyr)       # for data wrangling
+library(ggplot2)     # for awesome plotting
+library(doParallel)  # for parallel backend to foreach (to speed computation)
+library(foreach)     # for parallel processing with for loops
+library(rsample)     # for sample split
+
+# Modeling packages
+library(gbm)      # for original implementation of regular and stochastic GBMs
+library(h2o)      # for a java-based implementation of GBM variants
+library(xgboost)  # for fitting extreme gradient boosting
+library(caret)    # for general modelling
+
+
+ames <- AmesHousing::make_ames()
+set.seed(123)
+split <- initial_split(ames, prop = 0.7, 
+                       strata = "Sale_Price")
+ames_train  <- training(split)
+ames_test   <- testing(split)
+
+
+# run a basic GBM model (This model takes a little over 2 minutes to run)
+set.seed(123)  # for reproducibility
+ames_gbm1 <- gbm(
+  formula = Sale_Price ~ .,
+  data = ames_train,
+  distribution = "gaussian",  # SSE loss function
+  n.trees = 5000,
+  shrinkage = 0.1,
+  interaction.depth = 3,
+  n.minobsinnode = 10,
+  cv.folds = 10
+)
+
+# find index for number trees with minimum CV error
+best <- which.min(ames_gbm1$cv.error)
+best
+# [1] 1119
+
+# get MSE and compute RMSE
+sqrt(ames_gbm1$cv.error[best])
+## [1] 22.402
+
+# plot training (in black) and cross-validated MSE (in green) as n trees are 
+# added to the GBM algorithm. 
+gbm.perf(ames_gbm1, method = "cv")
+
+
+# Tuning strategy 
+# 1. Choose a relatively high learning rate. Generally, the default value of 0.1 works,
+#    but somewhere between 0.05–0.2 should work across a wide range of problems.
+# 2. Determine the optimum number of trees for this learning rate.
+# 3. Fix tree hyperparameters and tune learning rate and assess speed vs. performance.
+# 4. Tune tree-specific parameters for decided learning rate.
+# 5. Once tree-specific parameters have been found, lower the learning rate to 
+#    assess for any improvements in accuracy.
+# 6. Use final hyperparameter settings and increase CV procedures to get more 
+#    robust estimates. 
+#    Often, the above steps are performed with a simple validation procedure or 
+#    5-fold CV due to computational constraints. 
+#    If you used k-fold CV throughout steps 1–5 then this step is not necessary.
+
+# We did step 1 and 2 before
+# Now we proceed with step 3. 
+# The following grid search took us about 10 minutes.
+
+# create grid search to tune the learning rate
+hyper_grid <- expand.grid(
+  learning_rate = c(0.3, 0.1, 0.05, 0.01, 0.005),
+  RMSE = NA,
+  trees = NA,
+  time = NA
+)
+
+# execute grid search
+for(i in seq_len(nrow(hyper_grid))) {
+  
+  # fit gbm
+  set.seed(123)  # for reproducibility
+  train_time <- system.time({
+    m <- gbm(
+      formula = Sale_Price ~ .,
+      data = ames_train,
+      distribution = "gaussian",
+      n.trees = 5000, 
+      shrinkage = hyper_grid$learning_rate[i], 
+      interaction.depth = 3, 
+      n.minobsinnode = 10,
+      cv.folds = 10 
+    )
+  })
+  
+  # add SSE, trees, and training time to results
+  hyper_grid$RMSE[i]  <- sqrt(min(m$cv.error))
+  hyper_grid$trees[i] <- which.min(m$cv.error)
+  hyper_grid$Time[i]  <- train_time[["elapsed"]]
+  
+}
+
+# results HOM
+arrange(hyper_grid, RMSE)
+##   learning_rate  RMSE trees  time
+## 1         0.050 21382  2375 129.5   -->> BEST
+## 2         0.010 21828  4982 126.0
+## 3         0.100 22252   874 137.6
+## 4         0.005 23136  5000 136.8
+## 5         0.300 24454   427 139.9
+
+## results 2024 my output 
+##  learning_rate     RMSE trees time   Time
+## 1         0.050 21807.96  1565   NA 50.098 -->> BEST
+## 2         0.010 22102.34  4986   NA 49.772
+## 3         0.100 22402.07  1119   NA 49.947
+## 4         0.005 23054.68  4995   NA 50.537
+## 5         0.300 24411.95   269   NA 50.636
+
+
+
+
+# Next, step 4) we’ll set our learning rate at the optimal level found (0.05) 
+# and tune the tree specific hyperparameters (interaction.depth and n.minobsinnode). 
+# The following grid search took us about 30 minutes.
+
+# search grid to tune the interaction.depth and n.minobsinnode 
+hyper_grid <- expand.grid(
+  n.trees = 6000,
+  shrinkage = 0.05, # note there is a typo in the book
+  interaction.depth = c(3, 5, 7),
+  n.minobsinnode = c(5, 10, 15)
+)
+
+# create model fit function
+model_fit <- function(n.trees, shrinkage, interaction.depth, n.minobsinnode) {
+  set.seed(123)
+  m <- gbm(
+    formula = Sale_Price ~ .,
+    data = ames_train,
+    distribution = "gaussian",
+    n.trees = n.trees,
+    shrinkage = shrinkage,
+    interaction.depth = interaction.depth,
+    n.minobsinnode = n.minobsinnode,
+    cv.folds = 10
+  )
+  # compute RMSE
+  sqrt(min(m$cv.error))
+}
+
+# perform search grid with functional programming https://purrr.tidyverse.org/
+hyper_grid$rmse <- purrr::pmap_dbl(      # function used for parallel mapping over the rows of the hyper_grid
+  hyper_grid,
+  ~ model_fit(
+    n.trees = ..1,               # ...1 first column in the hyper_grid
+    shrinkage = ..2,
+    interaction.depth = ..3,
+    n.minobsinnode = ..4
+  )
+)
+
+# The end result is a data frame (hyper_grid) augmented with an additional 
+# column rmse, containing the RMSE values for each combination of hyperparameters. 
+# This process allows for identifying the hyperparameter combination that yields
+# the best model performance, as measured by the RMSE
+
+
+# results HOM
+arrange(hyper_grid, rmse)
+##   n.trees shrinkage interaction.depth n.minobsinnode  rmse
+## 1    4000      0.05                 5              5 20699  --->> BEST (Adjusting the tree-specific parameters provides us with an additional reduction in RMSE).
+## 2    4000      0.05                 3              5 20723
+## 3    4000      0.05                 7              5 21021
+## 4    4000      0.05                 3             10 21382
+## 5    4000      0.05                 5             10 21915
+## 6    4000      0.05                 5             15 21924
+## 7    4000      0.05                 3             15 21943
+## 8    4000      0.05                 7             10 21999
+## 9    4000      0.05                 7             15 22348
+
+
+## results 2024 my output 
+## n.trees shrinkage interaction.depth n.minobsinnode     rmse
+## 1    6000      0.05                 5             10 21793.28 --->> BEST
+## 2    6000      0.05                 3             10 21807.96
+## 3    6000      0.05                 5              5 21976.76
+## 4    6000      0.05                 3              5 22104.49
+## 5    6000      0.05                 5             15 22156.30
+## 6    6000      0.05                 3             15 22170.16
+## 7    6000      0.05                 7             10 22268.51
+## 8    6000      0.05                 7              5 22316.37
+## 9    6000      0.05                 7             15 22595.51
+
+
+
+
+
+# Step 5. After this procedure, one can take the top model’s hyperparameter settings, 
+# reduce the learning rate from 0.05 to 0.005, and increased the number of trees 
+# (8000 and then to 10000) to see if any additional improvement in accuracy. 
+
+set.seed(123)  
+ames_gbm1 <- gbm(
+  formula = Sale_Price ~ .,
+  data = ames_train,
+  distribution = "gaussian",  
+  n.trees = 10000,
+  shrinkage = 0.005,
+  interaction.depth = 5,
+  n.minobsinnode = 10,
+  cv.folds = 10
+)
+
+# find index for number trees with minimum CV error
+best <- which.min(ames_gbm1$cv.error)
+best
+# [1] 9975
+
+# RMSE
+sqrt(ames_gbm1$cv.error[best])
+## [1] 21682.26
+
+# plot training and cross-validated MSE as n trees are added to the GBM algorithm. 
+gbm.perf(ames_gbm1, method = "cv")
+
+
+# Step 6. Use final hyperparameter settings and increase CV procedures to get 
+# more robust estimates. We have already implemented 10-fold CV in the process. 
+
+
+# 12.4 Stochastic GBMs is left as OPTIONAL reading. 
+
+
+# ######################################
+# 12.5 XGBoost (Chen and Guestrin 2016) 
+########################################
+#   * It is similar to Gradient Boosting, but even more efficient 
+#   * eXtreme Gradient Boosting (regularization to prevent overfitting + 
+#     an efficient implementation: While regular gradient boosting uses the 
+#     loss function of our base model (e.g. decision tree) 
+#     as a proxy for minimizing the error of the overall model, 
+#     XGBoost uses the 2nd order derivative as an approximation 
+#  
+#   * It is very popular in data science 
+#   * It is consistently used to win machine learning competitions on Kaggle 👀
+#   * xgboost is a very effective implementation of an old idea coming 
+#     from Adaboost and gradient boosted trees
+
+
+#   * xgboost - the tuning parameters are similar to those of RF and Boosting,
+#     but it introduces some new parameters
+#   - Number of Boosting Iterations (nrounds, numeric) - the number of decision
+#      trees (i.e., base learners) to ensemble 
+#   - Max Tree Depth (max_depth, numeric)-depth of a tree (default:6,typical:3-10)
+#   - Shrinkage (eta, numeric) - reducing contribution of subsequent models by 
+#      shrinking the weights (default: 0.3, typical: 0.01-0.2)
+#      Learning rate or shrinkage controls how much each tree contributes to the
+#      overall model, with smaller values leading to more conservative updates 
+#      and larger values leading to more aggressive updates.
+#   - Minimum Loss Reduction (gamma, numeric) - specifies a minimum loss 
+#      reduction required to make a further partition on a leaf node of the tree
+#   - Other regularization parameters (lambda and alpha, numeric)- 
+#      correspond to L1 and L2 regularization; setting both of these to greater
+#      than 0 results in an elastic net regularization; 
+#   - Subsample Ratio of Columns (colsample_bytree, numeric)- fraction of features 
+#      to be sampled randomly for each of the trees (default: 1, typical: 0.5-1)
+#   - Minimum Sum of Instance Weight (min_child_weight, numeric) - minimum sum 
+#      of weight for a child node; protects overfit (default: 1)
+#   - Subsample Percentage (subsample, numeric) - fraction of observations to be
+#      sampled randomly for each of the trees (default: 1, typical: 0.5-1)
+
+
+#   * Here an application with "xgboost" package 
+#   * NOTE:when using xgboost package it requires some data preparation:
+    #   - to encode our categorical variables numerically
+    #   - matrix input for the features and the response to be a vector
+
+
+# Preliminary data preprocessing: 
+# encode our categorical variables numerically
+library(recipes)
+xgb_prep <- recipe(Sale_Price ~ ., data = ames_train) %>%
+  step_integer(all_nominal()) %>%
+  prep(training = ames_train, retain = TRUE) %>%
+  juice() # function to extract the preprocessed data from the recipe object
+
+# convert the training data frame to a matrix
+X <- as.matrix(xgb_prep[setdiff(names(xgb_prep), "Sale_Price")])
+Y <- xgb_prep$Sale_Price
+
+
+# A series of grid searches similar to the previous sections can be performed (not shown)
+# Based on this, one sets the model hyperparameters (in the params() list)
+
+set.seed(123)
+ames_xgb <- xgb.cv(
+  data = X,
+  label = Y,
+  nrounds = 6000,
+  objective = "reg:squarederror",  # for classification 0/1 objective = "binary:logistic",
+  early_stopping_rounds = 50, 
+  nfold = 10,
+  params = list(
+    eta = 0.1,
+    max_depth = 3,
+    min_child_weight = 3,
+    subsample = 0.8,
+    colsample_bytree = 1.0),
+  verbose = 0
+)  
+
+# minimum test CV RMSE
+min(ames_xgb$evaluation_log$test_rmse_mean)
+## [1] 20488 --->> this RMSE is slightly lower than the best regular boosting run before
+
+## 
+## results 2024 my output 
+## [1] 23341.22
+
+
+
+# Next, assess if overfitting is limiting our model’s performance by performing a grid search 
+# that examines various regularization parameters (gamma, lambda, and alpha).
+# it takes very long time
+# cf. authors: Due to the low learning rate (eta), this cartesian grid search takes a long time. 
+# They stopped the search after 2 hours and only 98 of the 245 models had completed.
+# So take the code below as an example (do not have to run it in class)
+
+# hyperparameter grid
+hyper_grid <- expand.grid(
+  eta = 0.01,
+  max_depth = 3, 
+  min_child_weight = 3,
+  subsample = 0.5, 
+  colsample_bytree = 0.5,
+  gamma = c(0, 1, 10, 100, 1000),
+  lambda = c(0, 1e-2, 0.1, 1, 100, 1000, 10000),
+  alpha = c(0, 1e-2, 0.1, 1, 100, 1000, 10000),
+  rmse = 0,          # a place to dump RMSE results
+  trees = 0          # a place to dump required number of trees
+)
+
+# grid search
+for(i in seq_len(nrow(hyper_grid))) {
+  set.seed(123)
+  m <- xgb.cv(
+    data = X,
+    label = Y,
+    nrounds = 4000,
+    objective = "reg:linear",
+    early_stopping_rounds = 50, 
+    nfold = 10,
+    verbose = 0,
+    params = list( 
+      eta = hyper_grid$eta[i], 
+      max_depth = hyper_grid$max_depth[i],
+      min_child_weight = hyper_grid$min_child_weight[i],
+      subsample = hyper_grid$subsample[i],
+      colsample_bytree = hyper_grid$colsample_bytree[i],
+      gamma = hyper_grid$gamma[i], 
+      lambda = hyper_grid$lambda[i], 
+      alpha = hyper_grid$alpha[i]
+    ) 
+  )
+  hyper_grid$rmse[i] <- min(m$evaluation_log$test_rmse_mean)
+  hyper_grid$trees[i] <- m$best_iteration
+}
+
+# results
+hyper_grid %>%
+  filter(rmse > 0) %>%
+  arrange(rmse) %>%
+  glimpse()
+## Observations: 98
+## Variables: 10
+## $ eta              <dbl> 0.01, 0.01, 0.01, 0.01, 0.01, 0.0…
+## $ max_depth        <dbl> 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, …
+## $ min_child_weight <dbl> 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, …
+## $ subsample        <dbl> 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5…
+## $ colsample_bytree <dbl> 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5…
+## $ gamma            <dbl> 0, 1, 10, 100, 1000, 0, 1, 10, 10…
+## $ lambda           <dbl> 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, …
+## $ alpha            <dbl> 0.00, 0.00, 0.00, 0.00, 0.00, 0.1…
+## $ rmse             <dbl> 20488, 20488, 20488, 20488, 20488…
+## $ trees            <dbl> 3944, 3944, 3944, 3944, 3944, 381…
+
+
+
+# Assuming the optimal hyperparameters found before, we fit the final model.
+# We take the optimal number of trees found during cross validation (3944)
+
+# optimal parameter list
+params <- list(
+  eta = 0.01,
+  max_depth = 3,
+  min_child_weight = 3,
+  subsample = 0.5,
+  colsample_bytree = 0.5
+)
+
+# train final model
+xgb.fit.final <- xgboost(
+  params = params,
+  data = X,
+  label = Y,
+  nrounds = 3944,
+  objective = "reg:squarederror",
+  verbose = 0
+)
+
+
+# test error
+blueprint <- recipe(Sale_Price ~ ., data = ames_train) %>%
+  step_integer(all_nominal())
+prepare <- prep(blueprint, training = ames_train)
+baked_test <- bake(prepare, new_data = ames_test)
+# convert the training data frame to a matrix
+X_test <- as.matrix(baked_test[setdiff(names(baked_test), "Sale_Price")])
+Y_test <- baked_test$Sale_Price
+
+predictions = predict(xgb.fit.final, X_test, n.trees = 3944) 
+(RMSE = sqrt(mean((Y_test-predictions)^2)))
+
+
+# variable importance plot
+vip::vip(xgb.fit.final) 
+
+
+
+
+# One can run XGBoost in caret library
+# I keep the grid to minimum to reduce time of convergence
+
+library(caret)
+set.seed(123)
+
+# Define train control
+train.param <- trainControl(method = "cv", number = 5) 
+
+# Define parameter grid for tuning
+tune.grid.xgboost <- expand.grid(nrounds=300, 
+                                 max_depth=3, 
+                                 gamma=c(0), 
+                                 eta=c(0.03),
+                                 subsample=0.5, 
+                                 colsample_bytree=0.1, 
+                                 min_child_weight = 1)
+# Train the xgboost model
+model.xgboost <- train(Sale_Price ~ ., ames_train,
+                       method = "xgbTree",
+                       tuneGrid = tune.grid.xgboost,
+                       trControl = train.param)
+model.xgboost
+# RMSE      Rsquared  MAE     
+# 26370.56  0.893265  16807.21
+# not the best result without tuning the parameters
+
+#plot(model.xgboost)
+var.imp <- varImp(model.xgboost, scale = FALSE)
+plot(var.imp, 5)
+var.imp$importance
+
+
+# If you tune the parameters, it takes some hours to convergence
+# Define parameter grid for tuning
+tune.grid.xgboost <- expand.grid(
+  nrounds = 300,
+  max_depth = c(3, 6, 9),
+  eta = c(0.01, 0.03, 0.05),
+  gamma = c(0, 1, 5),
+  colsample_bytree = seq(0.1, 1, by = 0.1),
+  min_child_weight = c(1, 5, 10),
+  subsample = seq(0.5, 1, by = 0.1)
+)
+
+# Train the xgboost model with parameter tuning
+model.xgboost <- train(
+  Sale_Price ~ .,
+  data = ames_train,
+  method = "xgbTree",
+  tuneGrid = tune.grid.xgboost,
+  trControl = train.param
+)
+
+# Print the model
+print(model.xgboost)
+
+
+# Concl. 
+# GBMs are one of the most powerful ensemble algorithms
+# Alternative GBMs exist and are developed continuously
+# CatBoost(Dorogush, Ershov, and Gulin 2018) and LightGBM (Ke et al. 2017) 
+```
+
+
+#HOM RF
+```{r HOM RF }
+##############################################################
+# Random forest (RF)
+# Ch.11, HOM with R
+# Adv.: greatly reduce instability and between-tree correlation
+# Adv.: faster than bagging 
+##############################################################
+# Data: Ames 
+# DV: Sale_Price (i.e., $195,000, $215,000)
+# Features: 80
+# Observations: 2,930
+# Objective: use property attributes to predict the sale price of a house
+# Access: provided by the AmesHousing package (Kuhn 2017a)
+# more details: See ?AmesHousing::ames_raw
+
+
+# Helper packages
+library(dplyr)    # for data wrangling
+library(ggplot2)  # for awesome graphics
+
+# Modeling packages
+library(ranger)   # a c++ implementation of random forest 
+library(h2o)      # a java-based implementation of random forest
+# NOTE: in ISL, we have use the original randomForest package (Liaw and Wiener 2002).
+# ranger and h2o are the most modern implementations; they
+# allow for parallelization to improve training time.
+ 
+
+set.seed(123)
+
+ames <- AmesHousing::make_ames()
+set.seed(123)
+split <- initial_split(ames, prop = 0.7, 
+                       strata = "Sale_Price")
+ames_train  <- training(split)
+ames_test   <- testing(split)
+
+
+# number of features
+n_features <- length(setdiff(names(ames_train), "Sale_Price"))
+n_features
+
+
+# train a default random forest model using ranger library
+ames_rf1 <- ranger(
+  Sale_Price ~ ., 
+  data = ames_train,
+  mtry = floor(n_features / 3),
+  respect.unordered.factors = "order",
+  seed = 123
+)
+
+# get Out-of-bag RMSE (OOB RMSE)
+(default_rmse <- sqrt(ames_rf1$prediction.error))
+
+
+# Tunable hyperparameters that we should consider when training a RF model
+  # create hyperparameter grid
+  hyper_grid <- expand.grid(
+    mtry = floor(n_features * c(.05, .15, .25, .333, .4)),
+    min.node.size = c(1, 3, 5, 10), 
+    replace = c(TRUE, FALSE),                             
+    sample.fraction = c(.5, .63, .8),                       
+    rmse = NA                                               
+  )
+  
+  # execute full cartesian grid search (where we assess every combination of hyperparameters of interest)
+  for(i in seq_len(nrow(hyper_grid))) {
+    # fit model for ith hyperparameter combination
+    fit <- ranger(
+      formula         = Sale_Price ~ ., 
+      data            = ames_train, 
+      num.trees       = n_features * 10,
+      mtry            = hyper_grid$mtry[i],
+      min.node.size   = hyper_grid$min.node.size[i],
+      replace         = hyper_grid$replace[i],
+      sample.fraction = hyper_grid$sample.fraction[i],
+      verbose         = FALSE,
+      seed            = 123,
+      respect.unordered.factors = 'order',
+    )
+    # export OOB error 
+    hyper_grid$rmse[i] <- sqrt(fit$prediction.error)
+  }
+  
+  # assess top 10 models
+  hyper_grid %>%
+    arrange(rmse) %>%
+    mutate(perc_gain = (default_rmse - rmse) / default_rmse * 100) %>%
+    head(10)
+
+# ***
+# An alternative implementation of RF using 
+# h2o library (see HOM) is left as an exercise. 
+# ***
+  
+# Feature importance 
+  # re-run model with impurity-based variable importance
+  rf_impurity <- ranger(
+    formula = Sale_Price ~ ., 
+    data = ames_train, 
+    num.trees = 2000,  # notice the model is re-run with the optimal hyperparam identified before
+    mtry = 32,
+    min.node.size = 1,
+    sample.fraction = .80,
+    replace = FALSE,
+    importance = "impurity",  # based on impurity
+    respect.unordered.factors = "order",
+    verbose = FALSE,
+    seed  = 123
+  )
+  
+  # re-run model with permutation-based variable importance
+  rf_permutation <- ranger(
+    formula = Sale_Price ~ ., 
+    data = ames_train, 
+    num.trees = 2000,
+    mtry = 32,
+    min.node.size = 1,
+    sample.fraction = .80,
+    replace = FALSE,
+    importance = "permutation",  # based on permutation
+    respect.unordered.factors = "order",
+    verbose = FALSE,
+    seed  = 123
+  ) 
+  
+  # Typically, you will not see the same variable importance order
+  # between the two options; however, you will often see similar 
+  # variables at the top of the plots (and also the bottom). 
+  
+  p1 <- vip::vip(rf_impurity, num_features = 25, bar = FALSE)
+  p2 <- vip::vip(rf_permutation, num_features = 25, bar = FALSE)
+  
+  gridExtra::grid.arrange(p1, p2, nrow = 1)
+```
+
+
+
+

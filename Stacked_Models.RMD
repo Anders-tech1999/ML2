@@ -27,9 +27,7 @@ The process of stacking models typically involves the following steps:
 
 ```{r packages}
 install.packages("rsample")
-
 install.packages("recipes")
-
 install.packages("h2o")
 ```
 
