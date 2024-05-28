@@ -165,6 +165,16 @@ head(empFactor$HighratingOverallBinary)
 ```
 REMEMBER to use ONLY ONE FORMAT of the ratingOverall variable
 
+```{r}
+empFactor  <- empFactor %>%
+  mutate(ratingOverall = case_when(
+    ratingOverall >= 1 & ratingOverall <= 3 ~ 1,
+    ratingOverall == 4 ~ 2,
+    ratingOverall == 5 ~ 3,
+    TRUE ~ NA_real_
+  ))
+```
+
 
 #DEALING WITH MISSING
 
@@ -973,10 +983,10 @@ Typically, you will not see the same variable importance order between the two o
 
 ```{r Feature importance Plot impurity }
 p1 <- vip::vip(rf_impurity, num_features = 13, bar = FALSE)
-p2 <- vip::vip(rf_permutation, num_features = 13, bar = FALSE)
+#p2 <- vip::vip(rf_permutation, num_features = 13, bar = FALSE)
 
 p1 #because of default for RF
-gridExtra::grid.arrange(p1, p2, nrow = 1)
+#gridExtra::grid.arrange(p1, p2, nrow = 1)
 ```
 
 
@@ -1251,6 +1261,7 @@ sensitivity (True Positive Rate) is an indication of how well the model is recal
 specificity is an indication of how well the model is predicting the negative class "No" and is 92%, which is a good performance of predicting the negative class
 
 precision of the model (Pos Pred Value) is a value that represents the precision or the proportion of positive predictions that are  actually true positives which is at 63.83% meaning that 57% of the time, the model correctly predicts a subscribed client.
+
 
 
 #SVM HOM
