@@ -1,0 +1,393 @@
+---
+title: "ML2Exam"
+output: html_document
+date: "2024-05-25"
+---
+
+Part A = 50%
+
+#A1 Data Preparation:
+
+```{r dataload}
+library(readxl)
+Data <- read_excel("C:/Users/Bruger/OneDrive - Aarhus universitet/8. semester - BI/ML2 - Machine Learning 2/ML2EXAM/Data.xls")
+empFactor <- Data
+```
+
+```{r}
+#install.packages("visdat")
+```
+
+
+```{r packages}
+# Helper packages
+library(dplyr)    # for data manipulation
+library(ggplot2)  # for awesome graphics
+library(visdat)   # for additional visualizations
+# Feature engineering packages
+library(caret)    # for various ML tasks
+library(recipes)  # for feature engineering tasks
+
+library(DataExplorer) # for data exploration
+library(caTools)      # Data splits
+library(rsample)      # for resampling procedures
+library(Hmisc)        # Missing data handling
+library(Metrics)#      # Performance measures
+library(reshape2)
+library(rpart)        # for fitting decision trees
+library(ipred)        # for fitting bagged decision trees #used in bagging in addition to random forest e.g. to compare bagging vs rf (but RF will dominate)
+library(randomForest) # for fitting bagged decision trees
+library(ranger)       # a c++ implementation of random forest 
+library(h2o)          # a java-based random forest
+library(modeldata)#    # for data set Job attrition
+library(kernlab)      # also for fitting SVMs 
+library(pdp)          # for partial dependence plots, etc.
+library(forecast)#     # Library for performance evaluation
+library(gbm)          # For Gradient Boosting models
+library(pROC)         # For AUC
+library(ROCR)         # For ROC AUC
+library(kernlab)
+```
+
+
+```{r data structure - overview}
+library(dplyr)
+# Convert all character columns in the data frame 'emp' to factors
+empFactor <- empFactor %>%
+  mutate(across(where(is.character), factor))
+
+empFactor$reviewId <- NULL
+empFactor$reviewDateTime <- NULL
+empFactor$isCurrentJob <- NULL
+empFactor$employmentStatus <- NULL
+empFactor$jobEndingYear <- NULL
+empFactor$jobTitle.text <- NULL
+empFactor$location.name <- NULL
+
+glimpse(empFactor)
+```
+character string (<chr>): these should be transformed into categorical variables
+
+Making the variable ordinal scaled: ordered = TRUE
+```{r Factorize/ordering ratingOverall}
+empFactor$ratingOverall <- factor(empFactor$ratingOverall)
+summary(empFactor$ratingOverall)
+# Convert to an ordinal factor
+empFactor$ratingOverall <- factor(empFactor$ratingOverall, levels = c(1, 2, 3, 4, 5), ordered = TRUE)
+```
+
+Showing the distribution of DV:
+```{r Histogram ratingOverall }
+histogram(empFactor$ratingOverall)
+
+# Load the ggplot2 library
+library(ggplot2)
+
+# Create a histogram of ratingOverall
+ggplot(empFactor, aes(x = ratingOverall)) +
+  geom_histogram(stat = "count", fill = "steelblue", color = "black", binwidth = 1) +
+  labs(x = "Overall Rating", y = "Frequency", title = "Distribution of Overall Ratings") +
+  theme_minimal() +
+  scale_x_discrete(limits = c("1", "2", "3", "4", "5"))  # Ensure that all rating levels are shown even if some have 0 counts
+```
+
+```{r Missing overview}
+library(visdat)
+sum(is.na(empFactor))
+vis_miss(empFactor, cluster = TRUE) #visdat library
+plot_missing(empFactor)
+```
+
+```{r Delete NAs ratingCeo;ratingBusinessOutlook;employmentStatus;ratingRecommendToFriend }
+empFactor <- empFactor[!is.na(empFactor$ratingCeo), ]
+empFactor <- empFactor[!is.na(empFactor$ratingBusinessOutlook), ]
+empFactor <- empFactor[!is.na(empFactor$ratingRecommendToFriend), ]
+
+sum(is.na(empFactor))
+```
+
+For computation and convergence the dataset is downsized randomly into 1000 - hereafter split into train and test set
+```{r downsizing datasplit 5-level DV }
+set.seed(1337)
+random_indices <- sample(1:nrow(empFactor), 1000)
+subempFactor <- empFactor[random_indices, ]
+
+subsplit  <- initial_split(subempFactor, prop = 0.7, strata = "ratingOverall") #Important to distinguish between binary and 5-level variable!
+subtrain <- training(subsplit)
+subtest  <- testing(subsplit)
+```
+
+
+```{r downsizing datasplit 5-level DV }
+str(subtrain)
+str(subtest)
+```
+
+#A2 Data Analysis Random Forest:
+Train a Random Forest using the training data to predict the ratingRecommendToFriend. 
+Use 1000 trees and a kappa metric for model evaluation. 
+Test different values of mtry from 1 to 10.
+The training task will take about 3 minutes to converge. If there are problems, you can reduce the size of the dataset. Provide the R code and interpretation of the output.
+
+# Alina Random forest
+```{r}
+train.param <- trainControl(method = "cv", number = 5)
+
+rf.model <- train(ratingOverall ~ ., subtrain,
+                  method = "rf", 
+                  ntree = 1000,
+                  metric = "Kappa",
+                  trControl = train.param,
+                  tune.grid = expand.grid(.mtry=c(1:10)))
+
+rf.model
+```
+The Random Forest model obtains the optimal performance with mtry:2
+mtry: 2
+Accuracy: 0.6552312
+Kappa: 0.5263452
+
+#A3 Data Analysis Random Forest: 
+
+Using the Random Forest you trained, evaluate the model on the testing data.
+a. Predict the ratingRecommendToFriend on the testing set.
+b. Calculate and plot the confusion matrix and AUC.
+Provide the R code and include the output with a discussion.
+
+```{r}
+# confusion matrix + KAPPA 
+real.pred <- subtest$ratingOverall 
+rfmodel.class.pred <- predict(rf.model, 
+                              subtest, 
+                              type = "raw") 
+rfmodel.scoring <- predict(rf.model, 
+                           subtest, 
+                           type = "prob") #[, "1"] 
+rfmodel.conf <- confusionMatrix(data = rfmodel.class.pred, 
+                                reference = real.pred,
+                                mode = "prec_recall") 
+# positive = "1",
+rfmodel.conf
+```
+Accuracy : 0.6512
+The amount of predictions hitting the actual observations
+The overall performance of the Random Forest model.
+
+95% CI : (0.876, 0.9428)
+ - Range in which the true accuracy of the model is expected to fall 95% of the time.
+
+No Information Rate : 0.3555          
+ - Accuracy achieved by always predicting the most frequent class.
+
+Kappa : 0.5276
+ - the agreement between predicted and true classes, adjusted for chance.
+ - Values range from -1 (complete disagreement) to 1 (perfect agreement), with 0 indicating chance agreement.
+
+Precision and Recall:
+ - Ability of the model to correctly identify positive and negative instances.
+ - The model does predict quite well on Class 5 with Precision: 0.8316 and Recall 0.7383. This is by far the Class where the Random Forest does the best work.
+ - The model does predict quite bad on Class 2 with Precision: 0.41667 and Recall 0.17857, This is by far the Class where the Random Forest does the worst work. The bad recall of this model is due to the amount of actual Class 3, which the model falsely predicted as Class 2.
+It seems that the model does a better job predicting the high scores of ratingOverall in comparison to the lower scores of ratingOverall. To come the model to rescue, the amount of observations of Class 4 and 5 is way bigger than the amount of Class 1,2,3.
+
+
+```{r}
+# ROC and AUC
+rf.auc = colAUC(rfmodel.scoring, real.pred, plotROC = TRUE) 
+rf.auc
+```
+The ROC curve is a representation of the models sensitivity and 1-specificity and to evaluate the performance of a model
+ - predicting a categorical variable with 5 levels, the evaluation is quite noisy in the Plot.
+the Area Under the Curve which represent a number between 0 and 1 in comparison between all classes interdependently, where the closer to 1 the better the performance of the model and an AUC of 0.5 is equal to a random guess.
+The measures are printed as follows:
+                1         2         3         4         5
+1 vs. 2 0.8027950 0.5970497 0.7600932 0.8190994 0.6793478
+1 vs. 3 0.9491304 0.6165217 0.8356522 0.9334783 0.8313043
+1 vs. 4 0.9901823 0.9013558 0.5432445 0.9705470 0.9041608
+1 vs. 5 0.9979683 0.9620073 0.7186103 0.7631044 0.9863876
+2 vs. 3 0.7664286 0.7264286 0.6575000 0.7478571 0.7035714
+2 vs. 4 0.9500768 0.9614055 0.7265745 0.8943932 0.8412058
+2 vs. 5 0.9893191 0.9866489 0.9444259 0.6076435 0.9726302
+3 vs. 4 0.8341935 0.8713978 0.7990323 0.7874194 0.6938710
+3 vs. 5 0.9226168 0.9283178 0.9612150 0.5308411 0.9389720
+4 vs. 5 0.6518440 0.6756607 0.8009748 0.7697719 0.8505175
+
+Once again the highest AUC-values are given in the Classes scoring ratingOverall high 4,5
+The lowest AUC values are given in the Classes scoring ratingoverall low 1,2,3
+
+
+#A4 Data Analysis XGBoost: 
+Train an XGBoost model on the training data to predict the same target variable as the Random Forest model. Use the parameters max_depth from 3 to 6, gamma from 0 to 5, and eta values of 0.03, 0.06, 0.1, and 0.2. Provide the summary of the trained model.
+The training task will take about 3 minutes to converge. If there are problems, reduce the dataset size to 50%. Provide the R code and interpretation of the output.
+
+```{r}
+train.param <- trainControl(method = "cv", number = 3) #3 for computation
+
+model.xgboost <- train(ratingOverall ~ ., subtrain,
+                method = "xgbTree",
+                metric = "Kappa",
+                tuneGrid = expand.grid(max_depth=3:6,
+                                      gamma=c(0, 1, 2, 3, 4, 5), 
+                                      eta=c(0.03, 0.06, 0.1, 0.2), 
+                                      nrounds=300,
+                                      subsample=0.5, 
+                                      colsample_bytree=0.1, 
+                                      min_child_weight = 1),
+                            trControl = train.param)
+model.xgboost
+```
+
+```{r XGBoost measures}
+model.xgboost$bestTune
+model.xgboost$results
+```
+eta   max_depth  gamma  Accuracy   Kappa    
+0.02  5          1      0.6246     0.4929          
+
+```{r XGBoost plot}
+plot(model.xgboost)
+```
+
+eta namely Shrinkage (Learning Rate):
+ - parameter controls step size at each iteration while moving toward a minimum of the loss function. Common values range from 0 to 0.3.
+ - Lower values make the model more robust to overfitting but require more trees.
+ 
+Max Depth:
+ - Maximum depth of a tree. This parameter controls the complexity of the model.
+ - Higher values allow the model to learn more complex patterns but can lead to overfitting.
+ - A depth of 5 is quite high ue to the hypergrid provided, whereas the XGBoost is quite complex which the hypergrid search found optimal
+ 
+Minimum Loss Reduction (Gamma):
+ - parameter specifies the minimum loss reduction required to make a further partition on a node of the tree.
+ - Higher values lead to fewer splits, thus making the model simpler.
+ - As the hypergrid found gamma=1 it found the amount splits high and thereby complex in comparison to the gridrange going from 0 to 5.
+
+From the Accuracy and Kappa:
+Accuracy : 0.6246 (RF:0.6512)
+The amount of predictions hitting the actual observations
+The overall performance of the Random Forest model.
+The Random forest performed better on accuracy.
+
+Kappa :0.4929  (RF: 0.5276)
+ - the agreement between predicted and true classes, adjusted for chance.
+ - Values range from -1 (complete disagreement) to 1 (perfect agreement), with 0 indicating chance agreement.
+The Random forest performed better on Kappa as well.
+
+
+#A5 Data Analysis XGBoost: 
+Using the XGBoost model you trained, perform the following evaluation tasks:
+a. Predict the ratingRecommendToFriend on the testing set.
+b. Calculate and plot the confusion matrix and AUC.
+Provide the R code and include the output with the discussion.
+
+```{r}
+# confusion matrix + KAPPA 
+real.pred <- subtest$ratingOverall 
+xgb.class.pred <- predict(model.xgboost, 
+                          subtest, 
+                          type = "raw") 
+xgb.scoring <- predict(model.xgboost, 
+                       subtest, 
+                       type = "prob")
+xgb.conf <- confusionMatrix(data = xgb.class.pred, 
+                            reference = real.pred, 
+                            mode = "prec_recall")
+#positive = "1", 
+xgb.conf
+```
+Accuracy : 0.6246 (RF: 0.6512)
+The amount of predictions hitting the actual observations
+The overall performance of XGBoost model.
+
+95% CI : (0.5672, 0.6795)
+ - Range in which the true accuracy of the model is expected to fall 95% of the time.
+
+No Information Rate : 0.3555          
+ - Accuracy achieved by always predicting the most frequent class.
+
+Kappa : 0.4929          
+ - the agreement between predicted and true classes, adjusted for chance.
+ - Values range from -1 (complete disagreement) to 1 (perfect agreement), with 0 indicating chance agreement.
+
+Precision and Recall :
+ - Ability of the model to correctly identify positive and negative instances.
+ - The model does predict quite well on Class 5 with Precision: 0.8242 and Recall 0.7009 This is by far the Class where the Random Forest does the best work.
+ - The model does predict quite bad on Class 2 with Precision: 0.28571 and Recall 0.14286. This is by far the Class where the XGBoost does the worst work. The bad recall of this model is due to the amount of actual Class 3, which the model falsely predicted as Class 2.
+It seems that the model does a better job predicting the high scores of ratingOverall in comparison to the lower scores of ratingOverall. To come the model to rescue, the amount of observations of Class 4 and 5 is way bigger than the amount of Class 1,2,3.
+These findings was similar in the Random Forest, which also preformed better on Classes 4 and 5 and worse on 1,2,3.
+
+```{r}
+# ROC and AUC
+xgb.auc = colAUC(xgb.scoring, real.pred, plotROC = TRUE) 
+xgb.auc
+```
+Plot and output from ROC and AUC shows the same insights as the RF section
+               1         2         3         4         5
+1 vs. 2 0.8059006 0.5683230 0.8167702 0.7732919 0.6552795
+1 vs. 3 0.9678261 0.7165217 0.8582609 0.9608696 0.8852174
+1 vs. 4 0.9873773 0.9574568 0.5619448 0.9887798 0.9672744
+1 vs. 5 0.9951239 0.9833401 0.7712312 0.9788704 0.9963430
+2 vs. 3 0.7778571 0.6671429 0.5592857 0.7850000 0.7650000
+2 vs. 4 0.9458525 0.9427803 0.7530722 0.9189708 0.9162826
+2 vs. 5 0.9769693 0.9783044 0.9392523 0.8034045 0.9906542
+3 vs. 4 0.8524731 0.8726882 0.7995699 0.7800000 0.7670968
+3 vs. 5 0.9343925 0.9471028 0.9517757 0.5190654 0.9557009
+4 vs. 5 0.7350518 0.7411818 0.8072053 0.7602753 0.8443875
+
+
+#A6 Model Comparison: 
+Compare the variable importance from the Random Forest and XGBoost models.
+Provide the R code and include the output with discussion.
+
+Random Forest Variable Importance
+ - use impurity, as it is the standard for RF models.
+
+```{r Feature Importance + impurity }
+rf_impurity <- ranger(
+  formula = ratingOverall ~ ., 
+  data = subtrain, 
+  num.trees = 1000,
+  mtry = 2,
+  min.node.size =5,
+  sample.fraction = 0.8,
+  replace = T,
+  importance = "impurity",  # based on impurity (Impurity importance, also known as Gini importance, is the default importance measure used in random forests. The impurity-based importance assesses the predictive power of each predictor by measuring how much splitting on that predictor improves the overall purity or homogeneity of the resulting nodes.)
+  respect.unordered.factors = "order",
+  verbose = T,
+  seed  = 123
+)
+rf_impurity
+```
+
+```{r Feature importance Plot impurity }
+p1 <- vip::vip(rf_impurity, num_features = 10, bar = FALSE)
+p1 
+```
+
+```{r XGBoost Variable Importance}
+#Feature importance
+vip::vip(model.xgboost) 
+```
+
+The Random Forest finds the four most important variables:
+ratingCultureAndValues
+ratingSeniorLeadership
+ratingCareerOpportunitues
+RatingRecommendToFriend
+
+The XGBoost finds the four most important variables:
+ratingSeniorLeadership
+ratingCultureAndValues
+ratingCareerOpportunitues
+RatingRecommendToFriendPOSITIVE
+
+From the Accuracy and Kappa:
+XGBoost Accuracy : 0.6246 
+Random Forest Accuracy :0.6512
+The Random forest performed better on accuracy.
+
+Kappa :0.4929  (RF: 0.5276)
+XGBoost       Kappa : 0.4929 
+Random Forest Kappa :0.5276
+The Random forest performed better on Kappa
+
+For this dataset, the Random Forest is prefered over the XGBoost to provide insights on the variables important to predict ratingOverall as well as predicting the Classes 1,2,3,4,5 scoring the employee satisfaction of the company
